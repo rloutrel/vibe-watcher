@@ -62,7 +62,7 @@ def scan_folder(folder, repo=None, backend=None):
     backend = backend or get_notification_backend()
 
     try:
-        state = repo.observe()
+        state = repo.observe(branch=folder.branch or None)
     except GitError as exc:
         snapshot = Snapshot.objects.create(
             folder=folder,
@@ -89,7 +89,7 @@ def scan_folder(folder, repo=None, backend=None):
     changed = state["upstream_changed"]
     if changed:
         head = state["head"]
-        notification_key = f"f{folder.id}:{head}"
+        notification_key = f"f{folder.id}:{state['branch']}:{head}"
         if already_notified(folder, head):
             logger.info(
                 "change already notified, skipping notification",

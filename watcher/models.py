@@ -23,6 +23,12 @@ class Folder(models.Model):
     name = models.CharField(max_length=200)
     path = models.TextField()
     url = models.CharField(max_length=500, blank=True, default="")
+    branch = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Branch to watch; empty means the currently checked-out branch.",
+    )
     poll_interval = models.PositiveIntegerField(
         default=DEFAULT_POLL_INTERVAL,
         help_text="Seconds between polls for this folder.",
@@ -52,6 +58,7 @@ class Folder(models.Model):
             "name": self.name,
             "path": self.path,
             "url": self.url,
+            "branch": self.branch,
             "poll_interval": self.poll_interval,
             "enabled": self.enabled,
         }

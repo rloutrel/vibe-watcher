@@ -9,4 +9,6 @@ urlpatterns = [
     path("folders/new/", views.folder_create, name="folder-create"),
     path("folders/<int:pk>/edit/", views.folder_update, name="folder-update"),
     path("folders/<int:pk>/delete/", views.folder_delete, name="folder-delete"),
+    path("folders/<int:pk>/branches/", views.folder_branches, name="folder-branches"),
+    path("folders/branches/", views.branches_for_path, name="branches-for-path"),
 ]

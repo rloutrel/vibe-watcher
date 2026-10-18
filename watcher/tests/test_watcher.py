@@ -67,9 +67,11 @@ class FakeRepo:
         self.result = result or observe_result()
         self.error = error
         self.calls = 0
+        self.observed_branchs = []
 
-    def observe(self):
+    def observe(self, branch=None):
         self.calls += 1
+        self.observed_branchs.append(branch)
         if self.error:
             raise self.error
         return self.result
@@ -187,7 +189,7 @@ class ScanFolderTests(TestCase, RepoFixture):
         self.assertEqual(snapshot.state, "clean:behind")
         self.assertEqual(snapshot.commits_behind, 2)
         self.assertEqual(len(backend.notifications), 1)
-        self.assertEqual(backend.notifications[0][2], f"f{folder.id}:def456")
+        self.assertEqual(backend.notifications[0][2], f"f{folder.id}:main:def456")
         self.assertTrue(
             NotifiedCommit.objects.filter(folder=folder, commit_hash="def456").exists()
         )
@@ -439,3 +441,107 @@ class UITests(TestCase, RepoFixture):
         self.client.post(reverse("watcher:folder-delete", args=[folder.pk]))
         self.assertFalse(Folder.objects.filter(name="repo-x").exists())
 
+
+
+class BranchSelectionTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_list_branches_format(self, run_git_mock):
+        run_git_mock.return_value = git_out("main\ndev\nremotes/origin/main\nremotes/origin/dev")
+        repo = GitRepo("/tmp/fake/repo-a")
+        branches = repo.list_branches()
+        self.assertEqual(
+            branches, ["main", "dev", "remotes/origin/main", "remotes/origin/dev"]
+        )
+        cmd = run_git_mock.call_args[0][1:]
+        self.assertEqual(cmd[0], "branch")
+        self.assertIn("-a", cmd)
+
+    @mock.patch("watcher.git.run_git")
+    def test_list_branches_fallback(self, run_git_mock):
+        res = GitCommandResult([], stdout="", stderr="", returncode=128)
+        res2 = GitCommandResult(
+            [], stdout="* main\n  dev\n  remotes/origin/main", stderr="", returncode=0
+        )
+        run_git_mock.side_effect = [res, res2]
+        repo = GitRepo("/tmp/fake/repo-a")
+        branches = repo.list_branches()
+        self.assertEqual(branches, ["main", "dev", "remotes/origin/main"])
+
+    @mock.patch("watcher.git.run_git")
+    def test_observe_uses_folder_branch(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "HEAD"):
+                return git_out("abc123")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/repo-a.git")
+            if cmd == ("status", "--porcelain"):
+                return git_out("")
+            if cmd[-1] == "origin/dev":
+                return git_out("def999")
+            if cmd[0] == "rev-list" and cmd[1] == "--left-right":
+                return git_out("0\t2\n")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        state = repo.observe(branch="origin/dev")
+        self.assertEqual(state["branch"], "origin/dev")
+        self.assertEqual(state["upstream"], "origin/dev")
+        self.assertEqual(state["commits_behind"], 2)
+        self.assertTrue(state["upstream_changed"])
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scan_folder_passes_branch(self, GitRepoMock):
+        fake = FakeRepo(observe_result(behind=1, head="cafe00", branch="dev"))
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(branch="dev")
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        self.assertEqual(fake.observed_branchs, ["dev"])
+        self.assertEqual(backend.notifications[0][2], f"f{folder.id}:dev:cafe00")
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scan_folder_default_branch_when_empty(self, GitRepoMock):
+        fake = FakeRepo(observe_result())
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(branch="")
+        scanner.scan_folder(folder, backend=FakeBackend())
+        self.assertEqual(fake.observed_branchs, [None])
+
+    @mock.patch("watcher.views.GitRepo")
+    def test_folder_branches_endpoint(self, GitRepoViewMock):
+        GitRepoViewMock.return_value.list_branches.return_value = ["main", "origin/dev"]
+        folder = self.make_folder()
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("bob", password="pw")
+        self.client.login(username="bob", password="pw")
+        response = self.client.get(reverse("watcher:folder-branches", args=[folder.pk]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["branches"], ["main", "origin/dev"])
+
+    @mock.patch("watcher.views.GitRepo")
+    def test_branches_for_path_endpoint(self, GitRepoViewMock):
+        GitRepoViewMock.return_value.list_branches.return_value = ["main"]
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("carol", password="pw")
+        self.client.login(username="carol", password="pw")
+        response = self.client.get(
+            reverse("watcher:branches-for-path"), {"path": "/tmp/fake/repo-a"}
+        )
+        self.assertEqual(response.status_code, 200)
+        GitRepoViewMock.assert_called_with("/tmp/fake/repo-a")
+        self.assertEqual(response.json()["branches"], ["main"])
+
+    def test_branches_for_path_requires_path(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("dave", password="pw")
+        self.client.login(username="dave", password="pw")
+        response = self.client.get(reverse("watcher:branches-for-path"))
+        self.assertEqual(response.status_code, 400)

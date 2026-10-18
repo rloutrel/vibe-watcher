@@ -33,7 +33,10 @@ python manage.py runserver          # terminal 1: web UI at http://127.0.0.1:800
 python manage.py watch_folders      # terminal 2: watcher loop
 ```
 
-Add folders in the UI (`/` → *Add folder*) or via `/admin/`.
+Add folders in the UI (`/` → *Add folder*) or via `/admin/`. Each folder
+can optionally select a specific **branch to watch**: the branch picker lists
+everything available in the repo (local and remote, via `git branch -a`);
+leave it empty to watch the currently checked-out branch.
 
 ## Compose setup
 
@@ -162,6 +165,22 @@ does not have. Options, in order of reliability:
    mode is recommended.
 3. Set `WATCHER_NOTIFY_BACKEND=none` on headless machines; events still show
    in the web UI.
+
+## Branch selection
+
+Each folder has an optional **Branch** field:
+
+- Empty (default) — the watcher observes the currently checked-out branch and
+  its upstream.
+- A local branch name (e.g. `main`, `dev`) — the watcher uses that branch's
+  upstream if configured, otherwise the branch tip.
+- A remote-tracking ref (e.g. `origin/main`) — the watcher compares the local
+  HEAD against that remote tip; pick this if you want to be notified when the
+  remote moves even if you don't have the branch checked out.
+
+The add/edit form fetches the available branches (`git branch -a`) from
+`/folders/<id>/branches/` (saved folders) or `/folders/branches/?path=...`
+(unsaved paths) and offers them in a datalist dropdown.
 
 ## Notification id reuse
 

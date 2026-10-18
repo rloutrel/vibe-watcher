@@ -1,10 +1,17 @@
+import json
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST, require_GET
 
 from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
+from .git import GitError, GitRepo
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus
 
 
@@ -40,6 +47,32 @@ def index(request):
             "watcher": watcher_status(),
         },
     )
+
+
+@login_required
+@require_GET
+def folder_branches(request, pk):
+    """JSON list of branches available in a saved folder's repo (git branch -a)."""
+    folder = get_object_or_404(Folder, pk=pk)
+    try:
+        branches = GitRepo(folder.path).list_branches()
+    except GitError as exc:
+        return JsonResponse({"error": str(exc)}, status=502)
+    return JsonResponse({"branches": branches})
+
+
+@login_required
+@require_GET
+def branches_for_path(request):
+    """JSON list of branches for an unsaved path (used by the Add form)."""
+    path = request.GET.get("path", "").strip()
+    if not path:
+        return JsonResponse({"error": "missing path"}, status=400)
+    try:
+        branches = GitRepo(path).list_branches()
+    except GitError as exc:
+        return JsonResponse({"error": str(exc)}, status=502)
+    return JsonResponse({"branches": branches})
 
 
 @login_required

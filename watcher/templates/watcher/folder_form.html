@@ -1,12 +1,48 @@
 {% extends "watcher/base.html" %}
 {% block content %}
 <h2>{% if folder %}Edit {{ folder.name }}{% else %}Add folder{% endif %}</h2>
-<form method="post">
+<form method="post" id="folder-form">
   {% csrf_token %}
   <table>
     {{ form.as_table }}
   </table>
+  <datalist id="branch-options"></datalist>
   <button class="btn" type="submit">Save</button>
   <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
 </form>
+<script>
+(function () {
+  var form = document.getElementById("folder-form");
+  var pathInput = form.querySelector("#id_path");
+  var branchInput = form.querySelector("#id_branch");
+  var datalist = document.getElementById("branch-options");
+  var fetchUrl = {% if folder %}"{% url 'watcher:folder-branches' folder.pk %}"{% else %}"{% url 'watcher:branches-for-path' %}"{% endif %};
+
+  function loadBranches() {
+    var url = fetchUrl;
+    if (url.indexOf("?") === -1 && !{{ folder|yesno:"0,1" }}) {
+      url += "?path=" + encodeURIComponent(pathInput.value);
+    }
+    if (!{{ folder|yesno:"0,1" }} && !pathInput.value.trim()) {
+      datalist.innerHTML = "";
+      return;
+    }
+    fetch(url)
+      .then(function (r) { return r.ok ? r.json() : { branches: [] }; })
+      .then(function (data) {
+        datalist.innerHTML = "";
+        (data.branches || []).forEach(function (name) {
+          var opt = document.createElement("option");
+          opt.value = name;
+          datalist.appendChild(opt);
+        });
+      })
+      .catch(function () {});
+  }
+
+  pathInput.addEventListener("blur", loadBranches);
+  branchInput.addEventListener("focus", loadBranches);
+  loadBranches();
+})();
+</script>
 {% endblock %}
