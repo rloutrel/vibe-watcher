@@ -189,9 +189,13 @@ Each folder has an optional **Branch** field:
   HEAD against that remote tip; pick this if you want to be notified when the
   remote moves even if you don't have the branch checked out.
 
-The add/edit form fetches the available branches (`git branch -a`) from
-`/folders/<id>/branches/` (saved folders) or `/folders/branches/?path=...`
-(unsaved paths) and offers them in a datalist dropdown.
+The add/edit form renders the Branch field as a **dropdown** (`<select>`)
+populated from `/folders/<id>/branches/` (saved folders) or
+`/folders/branches/?path=...` (unsaved paths): the current branch is marked,
+remoteless branches appear disabled with a `— no remote` marker, and the
+first option is the empty default (checked-out branch). A saved branch that
+no longer exists in the repo is kept as `(missing from repo)` so it stays
+visible and editable.
 
 ## Notification id reuse
 

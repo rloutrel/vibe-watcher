@@ -12,10 +12,10 @@ class FolderForm(forms.ModelForm):
         widgets = {
             "path": forms.TextInput(attrs={"placeholder": "~/code/my-repo or /home/me/code/my-repo"}),
             "url": forms.TextInput(attrs={"placeholder": "https://github.com/me/my-repo (optional, autodetected)"}),
-            "branch": forms.TextInput(
+            "branch": forms.Select(
                 attrs={
-                    "placeholder": "Leave empty for the checked-out branch",
-                    "list": "branch-options",
+                    "id": "id_branch",
+                    "data-placeholder": "Leave empty for the checked-out branch",
                 }
             ),
         }

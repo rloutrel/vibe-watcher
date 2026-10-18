@@ -6,7 +6,6 @@
   <table>
     {{ form.as_table }}
   </table>
-  <datalist id="branch-options"></datalist>
   <p id="branch-error" class="muted" style="color: #dc2626; display: none;"></p>
   <button class="btn" type="submit">Save</button>
   <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
@@ -17,11 +16,11 @@
   var pathInput = form.querySelector("#id_path");
   var nameInput = form.querySelector("#id_name");
   var urlInput = form.querySelector("#id_url");
-  var branchInput = form.querySelector("#id_branch");
-  var datalist = document.getElementById("branch-options");
+  var branchSelect = form.querySelector("#id_branch");
   var errorEl = document.getElementById("branch-error");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
   var detectUrl = "{% url 'watcher:folder-detect' %}";
+  var savedBranch = "{{ folder.branch|default:'' }}";
 
   function showError(message) {
     if (message) {
@@ -33,20 +32,42 @@
   }
 
   function setBranchOptions(data) {
-    datalist.innerHTML = "";
-    showError((data && data.no_remote_error) || "");
-    (data && data.branches || []).forEach(function (entry) {
+    var branches = (data && data.branches) || [];
+    var placeholder = branchSelect.getAttribute("data-placeholder") || "";
+
+    branchSelect.innerHTML = "";
+    var empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = placeholder;
+    branchSelect.appendChild(empty);
+
+    var selectedStillThere = savedBranch === "";
+    branches.forEach(function (entry) {
       if (typeof entry === "string") entry = { name: entry, disabled: false };
       var opt = document.createElement("option");
       opt.value = entry.name;
-      if (entry.disabled) {
-        opt.disabled = true;
-        opt.label = entry.name + " — no remote";
-      } else if (entry.current) {
-        opt.label = entry.name + " (current)";
+      var label = entry.name;
+      if (entry.current) label += " (current)";
+      if (entry.disabled) label += " — no remote";
+      opt.textContent = label;
+      if (entry.disabled) opt.disabled = true;
+      if (entry.name === savedBranch) {
+        opt.selected = true;
+        selectedStillThere = true;
       }
-      datalist.appendChild(opt);
+      branchSelect.appendChild(opt);
     });
+
+    if (!selectedStillThere && savedBranch) {
+      // Saved branch vanished from the repo: keep it as a selectable entry.
+      var keep = document.createElement("option");
+      keep.value = savedBranch;
+      keep.textContent = savedBranch + " (missing from repo)";
+      keep.selected = true;
+      branchSelect.appendChild(keep);
+    }
+
+    showError((data && data.no_remote_error) || "");
   }
 
   function fetchBranches() {
@@ -75,8 +96,8 @@
   }
 
   pathInput.addEventListener("blur", autodetect);
-  branchInput.addEventListener("focus", loadBranches);
-  {% if not folder %}autodetect();{% endif %}
+  pathInput.addEventListener("change", loadBranches);
+  {% if not folder %}autodetect();{% else %}loadBranches();{% endif %}
 })();
 </script>
 {% endblock %}
