@@ -1,0 +1,12 @@
+{% extends "watcher/base.html" %}
+{% block content %}
+<h2>{% if folder %}Edit {{ folder.name }}{% else %}Add folder{% endif %}</h2>
+<form method="post">
+  {% csrf_token %}
+  <table>
+    {{ form.as_table }}
+  </table>
+  <button class="btn" type="submit">Save</button>
+  <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
+</form>
+{% endblock %}

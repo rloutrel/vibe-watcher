@@ -1,0 +1,63 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      VIBE_WATCHER_DEBUG: "1"
+      VIBE_WATCHER_ALLOWED_HOSTS: "*"
+      VIBE_WATCHER_DB: "postgres"
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+      POSTGRES_HOST: db
+      WATCHER_NOTIFY_BACKEND: "none"
+    volumes:
+      - ..:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  watcher:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      VIBE_WATCHER_DEBUG: "0"
+      VIBE_WATCHER_DB: "postgres"
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+      POSTGRES_HOST: db
+      WATCHER_NOTIFY_BACKEND: "none"
+    volumes:
+      - ..:/app
+      - ${HOME}:/home/hostuser:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py watch_folders"
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibewatcher"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

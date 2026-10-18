@@ -1,0 +1,35 @@
+# vibe-watcher systemd unit (system mode)
+#
+# Install with: sudo ./packaging/systemd/install.sh --system
+# Environment file: /etc/vibe-watcher/env (see packaging/systemd/env.example)
+
+[Unit]
+Description=vibe-watcher: local git folder watcher
+Documentation=https://github.com/rloutrel/vibe-watcher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# Configure the user/group that owns the watched folders.
+User=vibe-watcher
+Group=vibe-watcher
+WorkingDirectory=/opt/vibe-watcher
+EnvironmentFile=/etc/vibe-watcher/env
+ExecStart=/usr/bin/env python3 manage.py watch_folders
+Restart=on-failure
+RestartSec=10
+# Journald picks up the structured JSON logs from stdout.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vibe-watcher
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vibe-watcher /var/lib/vibe-watcher
+
+[Install]
+WantedBy=multi-user.target

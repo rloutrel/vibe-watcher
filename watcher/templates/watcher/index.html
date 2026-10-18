@@ -1,0 +1,68 @@
+{% extends "watcher/base.html" %}
+{% block content %}
+
+<section>
+  <h2>Watcher status</h2>
+  <p>
+    {% if watcher.state == "ok" %}
+      <span class="badge ok">Running</span>
+    {% elif watcher.state == "stale" %}
+      <span class="badge stale">Stale heartbeat ({{ watcher.age_seconds }}s old) — watcher stopped or hung?</span>
+    {% else %}
+      <span class="badge never-run">Never run</span>
+    {% endif %}
+    {% if watcher.status and watcher.status.heartbeat %}
+      <span class="muted">last heartbeat {{ watcher.status.heartbeat|timesince }} ago,
+      pid {{ watcher.status.pid|default:"–" }}, iteration {{ watcher.status.iteration }}</span>
+    {% endif %}
+  </p>
+  {% if watcher.status and watcher.status.last_error %}
+    <p class="muted">Last error: {{ watcher.status.last_error }}</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Folders <a class="btn" href="{% url 'watcher:folder-create' %}">Add folder</a></h2>
+  <table>
+    <tr><th>Name</th><th>Path</th><th>Interval</th><th>Latest state</th><th></th></tr>
+    {% for folder, snapshot in rows %}
+      <tr>
+        <td>{{ folder.name }}{% if not folder.enabled %} <span class="muted">(disabled)</span>{% endif %}</td>
+        <td><code>{{ folder.path }}</code></td>
+        <td>{{ folder.poll_interval }}s</td>
+        <td>
+          {% if snapshot %}
+            <span class="badge {% if snapshot.state == 'error' %}stale{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}">{{ snapshot.state }}</span>
+            {% if snapshot.upstream %}<span class="muted">{{ snapshot.commits_behind }} behind / {{ snapshot.commits_ahead }} ahead</span>{% endif %}
+          {% else %}
+            <span class="muted">not scanned yet</span>
+          {% endif %}
+        </td>
+        <td>
+          <a class="btn" href="{% url 'watcher:folder-update' folder.pk %}">Edit</a>
+          <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline">{% csrf_token %}<button class="btn danger" type="submit">Delete</button></form>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No folders yet.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2>Recent events</h2>
+  <table>
+    <tr><th>When</th><th>Kind</th><th>Folder</th><th>Message</th></tr>
+    {% for event in events %}
+      <tr>
+        <td>{{ event.created_at|timesince }} ago</td>
+        <td>{{ event.kind }}</td>
+        <td>{{ event.folder.name|default:"–" }}</td>
+        <td>{{ event.message }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="muted">No events yet. The watcher writes events here as it polls.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}
