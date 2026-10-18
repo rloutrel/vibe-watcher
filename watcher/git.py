@@ -71,17 +71,14 @@ class GitRepo:
     def __init__(self, path):
         self.path = path
 
-    def list_branches(self):
-        """Return all branches known locally (git branch -a), as a list of strings.
-
-        Remote-tracking branches keep their ``origin/...`` form so callers can
-        offer the exact refs that can be watched. Order: local first, then
-        remotes, then HEAD alias stripped of its decoration.
-        """
-        res = run_git(self.path, "branch", "-a", "--format=%(refname:short)", check=False)
+    def _list_branches_cmd(self, extra_args):
+        """Run ``git branch <extra_args>`` and return clean short names."""
+        res = run_git(
+            self.path, "branch", *extra_args, "--format=%(refname:short)", check=False
+        )
         if not res.ok:
             # Fallback for very old git without --format support.
-            res = run_git(self.path, "branch", "-a", check=False)
+            res = run_git(self.path, "branch", *extra_args, check=False)
             branches = []
             for line in res.lines():
                 name = line.strip()
@@ -96,6 +93,23 @@ class GitRepo:
             if name and "->" not in name and name != "HEAD"
         ]
 
+    def list_branches(self):
+        """All branches known locally (git branch -a), as a list of strings.
+
+        Local branches with slashes (e.g. vibe/xyz) appear as-is, so callers
+        must not infer locality from the presence of a slash — use
+        ``branch_choices()`` for the classified, deduplicated picker list.
+        """
+        return self._list_branches_cmd(["-a"])
+
+    def list_local_branches(self):
+        """Local branch names only (git branch)."""
+        return self._list_branches_cmd([])
+
+    def list_remote_branches(self):
+        """Remote-tracking branch names (git branch -r), origin/... form."""
+        return self._list_branches_cmd(["-r"])
+
     def has_remote(self):
         """True if the repository has at least one remote configured."""
         res = run_git(self.path, "remote", check=False)
@@ -104,27 +118,29 @@ class GitRepo:
     def branch_choices(self):
         """Deduplicated branch list for the picker.
 
-        When both ``main`` and ``origin/main`` exist, only ``main`` is
-        offered: the watcher resolves the branch's upstream automatically, so
-        the remote-tracking duplicate adds nothing. Entries are dicts:
+        Local and remote-tracking branches are queried separately and matched
+        by name, so a local branch containing a slash (e.g.
+        ``vibe/capability-spec``) is correctly classified as local. When both
+        ``main`` and ``origin/main`` exist, only ``main`` is offered: the
+        watcher resolves the branch's upstream automatically. A branch that
+        only exists on the remote keeps its ``origin/...`` form so it can be
+        watched even without a local checkout. Entries are dicts:
 
-        - ``name``: the value to store (local branch name)
-        - ``remote``: True if this branch has a matching remote-tracking ref
+        - ``name``: the value to store (local branch name, or origin/... for
+          remote-only branches)
+        - ``remote``: True if a matching remote-tracking ref exists
         - ``current``: True for the checked-out branch
-
-        A repo with no remote at all yields entries with ``remote=False``;
-        callers surface the error (the watcher exists to track remotes).
         """
-        raw = self.list_branches()
+        locals_ = self.list_local_branches()
+        # The symbolic origin/HEAD alias renders as bare "origin" with
+        # --format=%(refname:short); it is not a real branch, drop it.
+        remotes = [r for r in self.list_remote_branches() if "/" in r]
+        remote_names = {r.split("/", 1)[1] for r in remotes}
         current = None
         try:
             current = self.current_branch()
         except GitError:
             pass
-
-        locals_ = [b for b in raw if "/" not in b]
-        remotes = [b for b in raw if "/" in b]
-        remote_short = {b.split("/", 1)[1] for b in remotes}
 
         seen = set()
         choices = []
@@ -135,7 +151,7 @@ class GitRepo:
             choices.append(
                 {
                     "name": name,
-                    "remote": name in remote_short,
+                    "remote": name in remote_names,
                     "current": name == current,
                 }
             )
@@ -232,11 +248,22 @@ class GitRepo:
         watched = branch or current
         upstream = None
         if branch:
-            if "/" in branch:
-                # Remote-tracking ref such as origin/main: watch its tip.
+            local = run_git(
+                self.path,
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{branch}",
+                check=False,
+            )
+            if not local.ok:
+                # Not a local branch: a remote-tracking ref such as
+                # origin/main — watch its tip directly.
                 upstream = branch
             else:
-                # Local branch name: prefer its upstream, else the branch tip.
+                # Local branch name: prefer its configured upstream; fall
+                # back to a matching origin/<branch> remote-tracking ref;
+                # last resort the branch tip itself.
                 up = run_git(
                     self.path,
                     "rev-parse",
@@ -245,7 +272,21 @@ class GitRepo:
                     f"{branch}@{{upstream}}",
                     check=False,
                 )
-                upstream = up.stdout.strip() if up.ok and up.stdout.strip() else branch
+                if up.ok and up.stdout.strip():
+                    upstream = up.stdout.strip()
+                else:
+                    origin_ref = run_git(
+                        self.path,
+                        "rev-parse",
+                        "--verify",
+                        "--quiet",
+                        f"refs/remotes/origin/{branch}",
+                        check=False,
+                    )
+                    if origin_ref.ok:
+                        upstream = f"origin/{branch}"
+                    else:
+                        upstream = branch
         else:
             upstream = self.upstream_name()
 

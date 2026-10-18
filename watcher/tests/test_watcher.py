@@ -479,6 +479,8 @@ class BranchSelectionTests(TestCase, RepoFixture):
                 return git_out("git@github.com:me/repo-a.git")
             if cmd == ("status", "--porcelain"):
                 return git_out("")
+            if cmd == ("rev-parse", "--verify", "--quiet", "refs/heads/origin/dev"):
+                return GitCommandResult([], stdout="", stderr="", returncode=1)
             if cmd[-1] == "origin/dev":
                 return git_out("def999")
             if cmd[0] == "rev-list" and cmd[1] == "--left-right":
@@ -686,8 +688,10 @@ class BranchChoicesTests(TestCase, RepoFixture):
     def test_dedupe_local_and_remote(self, run_git_mock):
         def side_effect(*args, **kwargs):
             cmd = args[1:]
-            if cmd == ("branch", "-a", "--format=%(refname:short)"):
-                return git_out("main\ndev\norigin/main\norigin/feature")
+            if cmd == ("branch", "--format=%(refname:short)"):
+                return git_out("main\ndev")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("origin/main\norigin/feature")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
             if cmd == ("remote",):
@@ -709,8 +713,10 @@ class BranchChoicesTests(TestCase, RepoFixture):
     def test_remote_only_branch_kept(self, run_git_mock):
         def side_effect(*args, **kwargs):
             cmd = args[1:]
-            if cmd == ("branch", "-a", "--format=%(refname:short)"):
-                return git_out("main\norigin/main\norigin/release")
+            if cmd == ("branch", "--format=%(refname:short)"):
+                return git_out("main")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("origin/main\norigin/release")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
             if cmd == ("remote",):
@@ -746,8 +752,10 @@ class BranchChoicesTests(TestCase, RepoFixture):
 
         def side_effect(*args, **kwargs):
             cmd = args[1:]
-            if cmd == ("branch", "-a", "--format=%(refname:short)"):
-                return git_out("main\ndev\norigin/main")
+            if cmd == ("branch", "--format=%(refname:short)"):
+                return git_out("main\ndev")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("origin/main")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
             if cmd == ("remote",):
@@ -769,8 +777,10 @@ class BranchChoicesTests(TestCase, RepoFixture):
 
         def side_effect(*args, **kwargs):
             cmd = args[1:]
-            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+            if cmd == ("branch", "--format=%(refname:short)"):
                 return git_out("main")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
             if cmd == ("remote",):
@@ -782,3 +792,84 @@ class BranchChoicesTests(TestCase, RepoFixture):
         self.assertFalse(payload["has_remote"])
         self.assertIn("no remote", payload["no_remote_error"])
         self.assertTrue(all(b["disabled"] for b in payload["branches"]))
+
+
+    @mock.patch("watcher.git.run_git")
+    def test_slash_named_local_branch_classified_local(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "--format=%(refname:short)"):
+                return git_out("main\nvibe/capability-spec-9d99e8")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("origin/main\norigin/vibe/capability-spec-9d99e8")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("vibe/capability-spec-9d99e8")
+            if cmd == ("remote",):
+                return git_out("origin")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        choices = repo.branch_choices()
+        self.assertEqual(
+            [c["name"] for c in choices],
+            ["main", "vibe/capability-spec-9d99e8"],
+        )
+        by_name = {c["name"]: c for c in choices}
+        self.assertTrue(by_name["vibe/capability-spec-9d99e8"]["remote"])
+        self.assertTrue(by_name["vibe/capability-spec-9d99e8"]["current"])
+
+    @mock.patch("watcher.git.run_git")
+    def test_remote_only_slash_branch_offered_for_watch(self, run_git_mock):
+        # A remote branch with no local checkout must still be selectable.
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "--format=%(refname:short)"):
+                return git_out("main")
+            if cmd == ("branch", "-r", "--format=%(refname:short)"):
+                return git_out("origin/main\norigin/feature/x")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("origin")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        choices = repo.branch_choices()
+        self.assertEqual([c["name"] for c in choices], ["main", "origin/feature/x"])
+        by_name = {c["name"]: c for c in choices}
+        self.assertTrue(by_name["origin/feature/x"]["remote"])
+
+
+    @mock.patch("watcher.git.run_git")
+    def test_observe_slash_local_branch_prefers_origin_fallback(self, run_git_mock):
+        # Local branch vibe/x with no upstream config but an origin/vibe/x
+        # remote-tracking ref: observe must compare against origin/vibe/x.
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "HEAD"):
+                return git_out("abc123")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/repo-a.git")
+            if cmd == ("status", "--porcelain"):
+                return git_out("")
+            if cmd == ("rev-parse", "--verify", "--quiet", "refs/heads/vibe/x"):
+                return git_out("abc123")
+            if cmd == ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "vibe/x@{upstream}"):
+                return GitCommandResult([], stdout="", stderr="", returncode=128)
+            if cmd == ("rev-parse", "--verify", "--quiet", "refs/remotes/origin/vibe/x"):
+                return git_out("def999")
+            if cmd[0] == "rev-list" and cmd[1] == "--left-right":
+                return git_out("0\t1\n")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        state = repo.observe(branch="vibe/x")
+        self.assertEqual(state["branch"], "vibe/x")
+        self.assertEqual(state["upstream"], "origin/vibe/x")
+        self.assertEqual(state["commits_behind"], 1)
+        self.assertTrue(state["upstream_changed"])
