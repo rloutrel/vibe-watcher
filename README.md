@@ -191,6 +191,24 @@ failures (offline) degrade gracefully to the last known refs.
 Each folder row has a **⟳ Check now** button that scans that folder
 immediately instead of waiting for its poll interval.
 
+### Automatic pull and restart
+
+Each folder has two extra options:
+
+- **Auto-pull** (`auto_pull`): when the remote changes, the watcher runs
+  `git pull --ff-only` automatically. Fast-forward only — if your local
+  branch diverged or the tree is dirty, the pull fails safely (nothing is
+  merged or lost) and the notification tells you to intervene manually.
+- **Post-pull command** (`post_pull_command`): a shell command executed in
+  the folder after a successful pull — typically
+  `docker compose up --build -d` to rebuild and restart the stack. Output
+  and errors are captured in the event feed.
+
+Workflow: remote push, watcher fetches, detects change, pulls (ff-only),
+runs the post-pull command, and the desktop notification confirms
+"Pulled and restarted."
+
+
 ## Folder management
 
 - **ON/OFF switch**: each folder row has a toggle — green = watching, grey =
