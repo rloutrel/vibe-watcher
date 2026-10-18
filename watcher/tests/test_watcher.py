@@ -988,3 +988,132 @@ class ToggleExportImportTests(TestCase, RepoFixture):
         self.assertContains(response, "icon-btn")
         self.assertContains(response, "folders/export/")
         self.assertContains(response, "folders/import/")
+
+
+class LocalPersistTests(TestCase, RepoFixture):
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        import os
+
+        self.tmpdir = tempfile.mkdtemp()
+        self.config_path = os.path.join(self.tmpdir, "watcher-config.json")
+        self._orig = os.environ.get("VIBE_WATCHER_CONFIG_PATH")
+        os.environ["VIBE_WATCHER_CONFIG_PATH"] = self.config_path
+
+    def tearDown(self):
+        import os
+
+        if self._orig is None:
+            os.environ.pop("VIBE_WATCHER_CONFIG_PATH", None)
+        else:
+            os.environ["VIBE_WATCHER_CONFIG_PATH"] = self._orig
+        super().tearDown()
+
+    def test_save_on_folder_change(self):
+        import json
+        import os
+
+        self.assertFalse(os.path.exists(self.config_path))
+        folder = self.make_folder(name="a", path="/tmp/a", branch="main")
+        self.assertTrue(os.path.exists(self.config_path))
+        with open(self.config_path) as fh:
+            payload = json.load(fh)
+        self.assertEqual(len(payload["folders"]), 1)
+        self.assertEqual(payload["folders"][0]["path"], "/tmp/a")
+        self.assertEqual(payload["folders"][0]["branch"], "main")
+
+        folder.enabled = False
+        folder.save()
+        with open(self.config_path) as fh:
+            payload = json.load(fh)
+        self.assertFalse(payload["folders"][0]["enabled"])
+
+        folder.delete()
+        with open(self.config_path) as fh:
+            payload = json.load(fh)
+        self.assertEqual(payload["folders"], [])
+
+    def test_toggle_persists(self):
+        import json
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("ivy", password="pw")
+        self.client.login(username="ivy", password="pw")
+        folder = self.make_folder()
+        self.client.post(reverse("watcher:folder-toggle", args=[folder.pk]))
+        with open(self.config_path) as fh:
+            payload = json.load(fh)
+        self.assertFalse(payload["folders"][0]["enabled"])
+
+    def test_restore_when_db_empty(self):
+        import json
+        import os
+
+        config = {
+            "app": "vibe-watcher",
+            "version": 1,
+            "folders": [
+                {"name": "a", "path": "/tmp/a", "url": "", "branch": "main",
+                 "poll_interval": 60, "enabled": True},
+                {"name": "b", "path": "/tmp/b", "url": "", "branch": "",
+                 "poll_interval": 30, "enabled": False},
+            ],
+        }
+        with open(self.config_path, "w") as fh:
+            json.dump(config, fh)
+
+        from watcher import persist
+
+        restored = persist.restore_if_needed()
+        self.assertEqual(restored, 2)
+        self.assertEqual(Folder.objects.count(), 2)
+        a = Folder.objects.get(path="/tmp/a")
+        self.assertEqual(a.branch, "main")
+        self.assertTrue(a.enabled)
+        b = Folder.objects.get(path="/tmp/b")
+        self.assertFalse(b.enabled)
+
+    def test_no_restore_when_db_has_folders(self):
+        import json
+        import os
+
+        self.make_folder(name="existing", path="/tmp/existing")
+        config = {"folders": [{"name": "x", "path": "/tmp/x", "poll_interval": 30, "enabled": True}]}
+        with open(self.config_path, "w") as fh:
+            json.dump(config, fh)
+
+        from watcher import persist
+
+        self.assertEqual(persist.restore_if_needed(), 0)
+        self.assertEqual(Folder.objects.count(), 1)
+        self.assertEqual(Folder.objects.first().path, "/tmp/existing")
+
+    def test_no_restore_without_config_file(self):
+        from watcher import persist
+
+        self.assertEqual(persist.restore_if_needed(), 0)
+        self.assertEqual(Folder.objects.count(), 0)
+
+    def test_restore_ignores_corrupt_config(self):
+        import os
+
+        with open(self.config_path, "w") as fh:
+            fh.write("{broken json")
+        from watcher import persist
+
+        self.assertEqual(persist.restore_if_needed(), 0)
+
+    def test_command_restores_on_startup(self):
+        import json
+        import os
+
+        config = {"folders": [{"name": "r", "path": "/tmp/r", "branch": "dev",
+                               "poll_interval": 30, "enabled": True}]}
+        with open(self.config_path, "w") as fh:
+            json.dump(config, fh)
+        out = StringIO()
+        call_command("watch_folders", "--once", stdout=out)
+        self.assertIn("Recovered 1 folder(s)", out.getvalue())
+        self.assertTrue(Folder.objects.filter(path="/tmp/r").exists())

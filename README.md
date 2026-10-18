@@ -78,6 +78,7 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_BACKEND` | `dbus` | `dbus` (notify-send) or `none` |
 | `WATCHER_NOTIFY_APP_NAME` | `vibe-watcher` | `-a` app name passed to notify-send |
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
+| `VIBE_WATCHER_CONFIG_PATH` | unset | On-disk config copy the service rewrites on every folder change and restores from at startup when the DB is empty |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |
 | `WATCHER_DEFAULT_POLL_INTERVAL` | `30` | Default per-folder poll interval |
 | `WATCHER_GIT_TIMEOUT` | `120` | Max seconds for one git invocation |
@@ -182,7 +183,13 @@ does not have. Options, in order of reliability:
 - **ON/OFF switch**: each folder row has a toggle — green = watching, grey =
   paused. Flipping it enables/disables the folder without deleting it.
 - **Icon actions**: ✏️ edits, 🗑️ deletes (with a confirmation prompt).
-- **Backup / restore**: *Export config* downloads `vibe-watcher-config.json`
+- **Automatic local persistence**: the service keeps a JSON copy of the
+  folder configuration on disk. Set `VIBE_WATCHER_CONFIG_PATH` (see the
+  env example; e.g. `/var/lib/vibe-watcher/watcher-config.json`) and every
+  folder change rewrites it automatically. On startup, if the database has
+  no folders but the file exists, the configuration is recovered from it —
+  so a wiped database self-heals on the next `watch_folders` run.
+- **Manual backup / restore**: *Export config* downloads `vibe-watcher-config.json`
   with all folders (path, branch, interval, enabled, url); *Import config*
   re-uploads it — folders are matched by path: existing ones are updated,
   missing ones are recreated. Use it to recover your setup after a database

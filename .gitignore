@@ -4,3 +4,4 @@ db.sqlite3
 staticfiles/
 .env
 .venv/
+watcher-config.json

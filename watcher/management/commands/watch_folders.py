@@ -9,7 +9,7 @@ import logging
 
 from django.core.management.base import BaseCommand
 
-from watcher import scanner
+from watcher import persist, scanner
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        restored = persist.restore_if_needed()
+        if restored:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Recovered {restored} folder(s) from the local config file."
+                )
+            )
         backend = None
         if options["notify_backend"]:
             from watcher.notify import get_notification_backend
