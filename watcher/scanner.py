@@ -7,6 +7,7 @@ without real git or notify-send (both are mocked at their seams).
 import logging
 import time
 
+from django.conf import settings
 from django.db import close_old_connections
 from django.utils import timezone
 
@@ -60,6 +61,15 @@ def scan_folder(folder, repo=None, backend=None):
     """
     repo = repo or GitRepo(folder.path)
     backend = backend or get_notification_backend()
+
+    if getattr(settings, "WATCHER_FETCH_BEFORE_SCAN", True):
+        try:
+            repo.fetch()
+        except GitError as exc:
+            logger.warning(
+                "fetch failed, comparing against existing refs",
+                extra={"folder": folder.name, "error": str(exc)},
+            )
 
     try:
         state = repo.observe(branch=folder.branch or None)

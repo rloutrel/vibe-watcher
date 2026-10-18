@@ -119,6 +119,9 @@ WATCHER_HEARTBEAT_STALE_AFTER = env_int("VIBE_WATCHER_HEARTBEAT_STALE_AFTER", 18
 # Default poll interval for folders (seconds).
 WATCHER_DEFAULT_POLL_INTERVAL = env_int("VIBE_WATCHER_DEFAULT_POLL_INTERVAL", 30)
 
+# Fetch the remote before each scan so origin/* refs are current.
+WATCHER_FETCH_BEFORE_SCAN = env_bool("VIBE_WATCHER_FETCH_BEFORE_SCAN", True)
+
 # Maximum subprocess time for a single git invocation.
 WATCHER_GIT_TIMEOUT = env_int("VIBE_WATCHER_GIT_TIMEOUT", 120)
 

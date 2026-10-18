@@ -78,6 +78,7 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_BACKEND` | `dbus` | `dbus` (notify-send) or `none` |
 | `WATCHER_NOTIFY_APP_NAME` | `vibe-watcher` | `-a` app name passed to notify-send |
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
+| `VIBE_WATCHER_FETCH_BEFORE_SCAN` | `1` | Run `git fetch --all` before each scan so remote changes are actually detected |
 | `VIBE_WATCHER_CONFIG_PATH` | unset | On-disk config copy the service rewrites on every folder change and restores from at startup when the DB is empty |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |
 | `WATCHER_DEFAULT_POLL_INTERVAL` | `30` | Default per-folder poll interval |
@@ -177,6 +178,18 @@ does not have. Options, in order of reliability:
    mode is recommended.
 3. Set `WATCHER_NOTIFY_BACKEND=none` on headless machines; events still show
    in the web UI.
+
+## Change detection
+
+The watcher runs ``git fetch --all`` before every scan, so remote-tracking
+refs (`origin/main` & co) always reflect the actual state of the remote —
+without a fetch, local refs only move when *you* run git fetch, and remote
+changes would be missed. Set `VIBE_WATCHER_FETCH_BEFORE_SCAN=0` to disable
+(e.g. for huge repos where you prefer polling local refs only); fetch
+failures (offline) degrade gracefully to the last known refs.
+
+Each folder row has a **⟳ Check now** button that scans that folder
+immediately instead of waiting for its poll interval.
 
 ## Folder management
 

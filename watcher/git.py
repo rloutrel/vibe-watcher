@@ -229,6 +229,15 @@ class GitRepo:
     def safe_to_pull(self):
         return self.status_is_clean()
 
+    def fetch(self):
+        """Fetch the remote so remote-tracking refs reflect reality.
+
+        Without this, origin/* refs only move when the user runs git fetch
+        manually — the watcher would compare against stale refs and miss
+        remote changes. Fetch is read-only for the working tree.
+        """
+        run_git(self.path, "fetch", "--all", "--quiet", check=False)
+
     def observe(self, branch=None):
         """Collect the current observable state of the repository.
 

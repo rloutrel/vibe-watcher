@@ -67,7 +67,11 @@ class FakeRepo:
         self.result = result or observe_result()
         self.error = error
         self.calls = 0
+        self.fetched = 0
         self.observed_branchs = []
+
+    def fetch(self):
+        self.fetched += 1
 
     def observe(self, branch=None):
         self.calls += 1
@@ -1117,3 +1121,80 @@ class LocalPersistTests(TestCase, RepoFixture):
         call_command("watch_folders", "--once", stdout=out)
         self.assertIn("Recovered 1 folder(s)", out.getvalue())
         self.assertTrue(Folder.objects.filter(path="/tmp/r").exists())
+
+
+    @override_settings(WATCHER_FETCH_BEFORE_SCAN=True)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scan_fetches_before_observe(self, GitRepoMock):
+        fake = FakeRepo(observe_result(behind=1, head="beef00"))
+        GitRepoMock.return_value = fake
+        folder = self.make_folder()
+        scanner.scan_folder(folder, backend=FakeBackend())
+        self.assertEqual(fake.fetched, 1)
+
+    @override_settings(WATCHER_FETCH_BEFORE_SCAN=False)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scan_fetch_can_be_disabled(self, GitRepoMock):
+        fake = FakeRepo(observe_result())
+        GitRepoMock.return_value = fake
+        folder = self.make_folder()
+        scanner.scan_folder(folder, backend=FakeBackend())
+        self.assertEqual(fake.fetched, 0)
+
+    @override_settings(WATCHER_FETCH_BEFORE_SCAN=True)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scan_survives_fetch_error(self, GitRepoMock):
+        fake = FakeRepo(observe_result(behind=1, head="beef00"))
+
+        def broken_fetch():
+            raise GitError("network down")
+
+        fake.fetch = broken_fetch
+        GitRepoMock.return_value = fake
+        folder = self.make_folder()
+        snapshot = scanner.scan_folder(folder, backend=FakeBackend())
+        self.assertNotEqual(snapshot.state, "error")
+
+
+class CheckNowTests(TestCase, RepoFixture):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("jane", password="pw")
+        self.client.login(username="jane", password="pw")
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_check_now_returns_fresh_snapshot(self, GitRepoMock):
+        GitRepoMock.return_value = FakeRepo(
+            observe_result(behind=3, head="feed00", branch="main")
+        )
+        folder = self.make_folder()
+        response = self.client.post(
+            reverse("watcher:folder-check-now", args=[folder.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["state"], "clean:behind")
+        self.assertEqual(data["commits_behind"], 3)
+        self.assertEqual(Snapshot.objects.filter(folder=folder).count(), 1)
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_check_now_records_error_state(self, GitRepoMock):
+        GitRepoMock.return_value = FakeRepo(error=GitError("no repo"))
+        folder = self.make_folder()
+        response = self.client.post(
+            reverse("watcher:folder-check-now", args=[folder.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["state"], "error")
+
+    def test_check_now_requires_post(self):
+        folder = self.make_folder()
+        response = self.client.get(reverse("watcher:folder-check-now", args=[folder.pk]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_index_has_check_now_button(self):
+        self.make_folder()
+        response = self.client.get(reverse("watcher:index"))
+        self.assertContains(response, "check-form")
+        self.assertContains(response, "title=\"Check now\"")

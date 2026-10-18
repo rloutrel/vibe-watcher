@@ -231,3 +231,27 @@ def folders_import(request):
             updated += 1
 
     return JsonResponse({"created": created, "updated": updated, "skipped": skipped})
+
+
+@login_required
+@require_POST
+def folder_check_now(request, pk):
+    """Scan one folder immediately and return the fresh snapshot."""
+    from . import scanner
+    from .notify import get_notification_backend
+
+    folder = get_object_or_404(Folder, pk=pk)
+    snapshot = scanner.scan_folder(
+        folder, backend=get_notification_backend("none")
+    )
+    return JsonResponse(
+        {
+            "id": folder.id,
+            "state": snapshot.state,
+            "branch": snapshot.branch,
+            "upstream": snapshot.upstream,
+            "commits_behind": snapshot.commits_behind,
+            "commits_ahead": snapshot.commits_ahead,
+            "error": snapshot.error,
+        }
+    )
