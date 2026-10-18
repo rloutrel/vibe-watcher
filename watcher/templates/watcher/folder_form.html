@@ -7,6 +7,7 @@
     {{ form.as_table }}
   </table>
   <datalist id="branch-options"></datalist>
+  <p id="branch-error" class="muted" style="color: #dc2626; display: none;"></p>
   <button class="btn" type="submit">Save</button>
   <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
 </form>
@@ -18,23 +19,45 @@
   var urlInput = form.querySelector("#id_url");
   var branchInput = form.querySelector("#id_branch");
   var datalist = document.getElementById("branch-options");
+  var errorEl = document.getElementById("branch-error");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
   var detectUrl = "{% url 'watcher:folder-detect' %}";
 
-  function setBranchOptions(branches) {
+  function showError(message) {
+    if (message) {
+      errorEl.textContent = message;
+      errorEl.style.display = "block";
+    } else {
+      errorEl.style.display = "none";
+    }
+  }
+
+  function setBranchOptions(data) {
     datalist.innerHTML = "";
-    (branches || []).forEach(function (name) {
+    showError((data && data.no_remote_error) || "");
+    (data && data.branches || []).forEach(function (entry) {
+      if (typeof entry === "string") entry = { name: entry, disabled: false };
       var opt = document.createElement("option");
-      opt.value = name;
+      opt.value = entry.name;
+      if (entry.disabled) {
+        opt.disabled = true;
+        opt.label = entry.name + " — no remote";
+      } else if (entry.current) {
+        opt.label = entry.name + " (current)";
+      }
       datalist.appendChild(opt);
     });
   }
 
+  function fetchBranches() {
+    if (!pathInput.value.trim()) return Promise.resolve(null);
+    return fetch(branchesUrl + "?path=" + encodeURIComponent(pathInput.value))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+
   function loadBranches() {
-    fetch(branchesUrl + "?path=" + encodeURIComponent(pathInput.value))
-      .then(function (r) { return r.ok ? r.json() : { branches: [] }; })
-      .then(function (data) { setBranchOptions(data.branches); })
-      .catch(function () {});
+    fetchBranches().then(function (data) { if (data) setBranchOptions(data); });
   }
 
   function autodetect() {
@@ -46,8 +69,7 @@
         if (data.path) pathInput.value = data.path;
         if (data.name && !nameInput.value.trim()) nameInput.value = data.name;
         if (data.url && !urlInput.value.trim()) urlInput.value = data.url;
-        if (data.branch && !branchInput.value.trim()) branchInput.value = data.branch;
-        setBranchOptions(data.branches);
+        if (data.branches) setBranchOptions(data);
       })
       .catch(function () {});
   }

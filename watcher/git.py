@@ -74,7 +74,7 @@ class GitRepo:
     def list_branches(self):
         """Return all branches known locally (git branch -a), as a list of strings.
 
-        Remote-tracking branches keep their ``origin/...`` form so the UI can
+        Remote-tracking branches keep their ``origin/...`` form so callers can
         offer the exact refs that can be watched. Order: local first, then
         remotes, then HEAD alias stripped of its decoration.
         """
@@ -95,6 +95,63 @@ class GitRepo:
             for name in res.lines()
             if name and "->" not in name and name != "HEAD"
         ]
+
+    def has_remote(self):
+        """True if the repository has at least one remote configured."""
+        res = run_git(self.path, "remote", check=False)
+        return res.ok and len(res.lines()) > 0
+
+    def branch_choices(self):
+        """Deduplicated branch list for the picker.
+
+        When both ``main`` and ``origin/main`` exist, only ``main`` is
+        offered: the watcher resolves the branch's upstream automatically, so
+        the remote-tracking duplicate adds nothing. Entries are dicts:
+
+        - ``name``: the value to store (local branch name)
+        - ``remote``: True if this branch has a matching remote-tracking ref
+        - ``current``: True for the checked-out branch
+
+        A repo with no remote at all yields entries with ``remote=False``;
+        callers surface the error (the watcher exists to track remotes).
+        """
+        raw = self.list_branches()
+        current = None
+        try:
+            current = self.current_branch()
+        except GitError:
+            pass
+
+        locals_ = [b for b in raw if "/" not in b]
+        remotes = [b for b in raw if "/" in b]
+        remote_short = {b.split("/", 1)[1] for b in remotes}
+
+        seen = set()
+        choices = []
+        for name in locals_:
+            if name in seen:
+                continue
+            seen.add(name)
+            choices.append(
+                {
+                    "name": name,
+                    "remote": name in remote_short,
+                    "current": name == current,
+                }
+            )
+        for name in remotes:
+            short = name.split("/", 1)[1]
+            if short in seen:
+                continue
+            seen.add(short)
+            choices.append(
+                {
+                    "name": name,
+                    "remote": True,
+                    "current": False,
+                }
+            )
+        return choices
 
     def rev_parse_head(self):
         return run_git(self.path, "rev-parse", "HEAD").stdout.strip()
@@ -229,6 +286,12 @@ class GitRepo:
         }
 
 
+NO_REMOTE_MESSAGE = (
+    "This repository has no remote. The watcher tracks remote changes, "
+    "so add a remote (git remote add origin <url> && git fetch) first."
+)
+
+
 def expand_path(path):
     """Expand ``~`` and environment variables in a user-entered path.
 
@@ -261,7 +324,9 @@ def detect_repo(path):
         info["name"] = info["path"].rstrip("/").split("/")[-1] or "folder"
         info["branch"] = current
         info["url"] = repo.remote_url()
+        info["has_remote"] = repo.has_remote()
         info["branches"] = repo.list_branches()
+        info["no_remote_error"] = "" if info["has_remote"] else NO_REMOTE_MESSAGE
     except GitError as exc:
         info["error"] = str(exc)
     return info

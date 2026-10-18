@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST, require_GET
 
 from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
-from .git import GitError, GitRepo, detect_repo
+from .git import NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus
 
 
@@ -64,16 +64,42 @@ def detect_folder(request):
     return JsonResponse(detect_repo(raw))
 
 
+def _branch_payload(repo):
+    """Structured branch list for the picker.
+
+    Branches existing both locally and on the remote are shown once (the
+    local name). Branches with no remote-tracking counterpart are marked
+    ``disabled`` — watching them cannot detect remote changes. When the repo
+    has no remote at all, every entry is disabled and ``no_remote`` is set.
+    """
+    choices = repo.branch_choices()
+    has_remote = repo.has_remote()
+    payload = {
+        "branches": [
+            {
+                "name": c["name"],
+                "current": c["current"],
+                "remote": c["remote"],
+                "disabled": (not has_remote) or (not c["remote"]),
+            }
+            for c in choices
+        ],
+        "has_remote": has_remote,
+        "no_remote_error": "" if has_remote else NO_REMOTE_MESSAGE,
+    }
+    return payload
+
+
 @login_required
 @require_GET
 def folder_branches(request, pk):
     """JSON list of branches available in a saved folder's repo (git branch -a)."""
     folder = get_object_or_404(Folder, pk=pk)
     try:
-        branches = GitRepo(folder.path).list_branches()
+        repo = GitRepo(folder.path)
+        return JsonResponse(_branch_payload(repo))
     except GitError as exc:
         return JsonResponse({"error": str(exc)}, status=502)
-    return JsonResponse({"branches": branches})
 
 
 @login_required
@@ -84,10 +110,10 @@ def branches_for_path(request):
     if not path:
         return JsonResponse({"error": "missing path"}, status=400)
     try:
-        branches = GitRepo(path).list_branches()
+        repo = GitRepo(path)
+        return JsonResponse(_branch_payload(repo))
     except GitError as exc:
         return JsonResponse({"error": str(exc)}, status=502)
-    return JsonResponse({"branches": branches})
 
 
 @login_required

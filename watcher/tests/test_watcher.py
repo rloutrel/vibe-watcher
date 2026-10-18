@@ -513,7 +513,13 @@ class BranchSelectionTests(TestCase, RepoFixture):
 
     @mock.patch("watcher.views.GitRepo")
     def test_folder_branches_endpoint(self, GitRepoViewMock):
-        GitRepoViewMock.return_value.list_branches.return_value = ["main", "origin/dev"]
+        repo = GitRepoViewMock.return_value
+        repo.list_branches.return_value = ["main", "dev", "origin/main"]
+        repo.has_remote.return_value = True
+        repo.branch_choices.return_value = [
+            {"name": "main", "remote": True, "current": True},
+            {"name": "dev", "remote": False, "current": False},
+        ]
         folder = self.make_folder()
         from django.contrib.auth.models import User
 
@@ -522,11 +528,23 @@ class BranchSelectionTests(TestCase, RepoFixture):
         response = self.client.get(reverse("watcher:folder-branches", args=[folder.pk]))
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["branches"], ["main", "origin/dev"])
+        self.assertEqual(data["has_remote"], True)
+        self.assertEqual(data["no_remote_error"], "")
+        self.assertEqual(
+            data["branches"],
+            [
+                {"name": "main", "remote": True, "current": True, "disabled": False},
+                {"name": "dev", "remote": False, "current": False, "disabled": True},
+            ],
+        )
 
     @mock.patch("watcher.views.GitRepo")
     def test_branches_for_path_endpoint(self, GitRepoViewMock):
-        GitRepoViewMock.return_value.list_branches.return_value = ["main"]
+        repo = GitRepoViewMock.return_value
+        repo.has_remote.return_value = False
+        repo.branch_choices.return_value = [
+            {"name": "main", "remote": False, "current": True}
+        ]
         from django.contrib.auth.models import User
 
         User.objects.create_user("carol", password="pw")
@@ -536,7 +554,10 @@ class BranchSelectionTests(TestCase, RepoFixture):
         )
         self.assertEqual(response.status_code, 200)
         GitRepoViewMock.assert_called_with("/tmp/fake/repo-a")
-        self.assertEqual(response.json()["branches"], ["main"])
+        data = response.json()
+        self.assertEqual(data["has_remote"], False)
+        self.assertIn("no remote", data["no_remote_error"])
+        self.assertTrue(data["branches"][0]["disabled"])
 
     def test_branches_for_path_requires_path(self):
         from django.contrib.auth.models import User
@@ -658,3 +679,106 @@ class QuickAddTests(TestCase, RepoFixture):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["path"], "/home/me/code/code/my-repo")
         self.assertEqual(form.cleaned_data["name"], "my-repo")
+
+
+class BranchChoicesTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_dedupe_local_and_remote(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+                return git_out("main\ndev\norigin/main\norigin/feature")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("origin")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        choices = repo.branch_choices()
+        names = [c["name"] for c in choices]
+        self.assertEqual(names, ["main", "dev", "origin/feature"])
+        by_name = {c["name"]: c for c in choices}
+        self.assertTrue(by_name["main"]["remote"])
+        self.assertFalse(by_name["dev"]["remote"])
+        self.assertTrue(by_name["main"]["current"])
+        self.assertFalse(by_name["dev"]["current"])
+
+    @mock.patch("watcher.git.run_git")
+    def test_remote_only_branch_kept(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+                return git_out("main\norigin/main\norigin/release")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("origin")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        names = [c["name"] for c in repo.branch_choices()]
+        self.assertEqual(names, ["main", "origin/release"])
+
+    @mock.patch("watcher.git.run_git")
+    def test_no_remote_marks_all_disabled(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+                return git_out("main\ndev")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        self.assertFalse(repo.has_remote())
+        choices = repo.branch_choices()
+        self.assertTrue(all(not c["remote"] for c in choices))
+
+    @mock.patch("watcher.git.run_git")
+    def test_payload_disables_remoteless_branches(self, run_git_mock):
+        from watcher.views import _branch_payload
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+                return git_out("main\ndev\norigin/main")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("origin")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        payload = _branch_payload(GitRepo("/tmp/fake/repo-a"))
+        self.assertTrue(payload["has_remote"])
+        self.assertEqual(payload["no_remote_error"], "")
+        by_name = {b["name"]: b for b in payload["branches"]}
+        self.assertFalse(by_name["main"]["disabled"])
+        self.assertTrue(by_name["dev"]["disabled"])
+        self.assertNotIn("origin/main", by_name)
+
+    @mock.patch("watcher.git.run_git")
+    def test_payload_no_remote_error(self, run_git_mock):
+        from watcher.views import _branch_payload
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("branch", "-a", "--format=%(refname:short)"):
+                return git_out("main")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote",):
+                return git_out("")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        payload = _branch_payload(GitRepo("/tmp/fake/repo-a"))
+        self.assertFalse(payload["has_remote"])
+        self.assertIn("no remote", payload["no_remote_error"])
+        self.assertTrue(all(b["disabled"] for b in payload["branches"]))
