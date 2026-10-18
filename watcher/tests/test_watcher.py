@@ -873,3 +873,118 @@ class BranchChoicesTests(TestCase, RepoFixture):
         self.assertEqual(state["upstream"], "origin/vibe/x")
         self.assertEqual(state["commits_behind"], 1)
         self.assertTrue(state["upstream_changed"])
+
+
+class ToggleExportImportTests(TestCase, RepoFixture):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("helen", password="pw")
+        self.client.login(username="helen", password="pw")
+
+    def test_toggle_flips_enabled(self):
+        folder = self.make_folder(enabled=True)
+        response = self.client.post(reverse("watcher:folder-toggle", args=[folder.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["enabled"], False)
+        folder.refresh_from_db()
+        self.assertFalse(folder.enabled)
+
+        response = self.client.post(reverse("watcher:folder-toggle", args=[folder.pk]))
+        self.assertEqual(response.json()["enabled"], True)
+        folder.refresh_from_db()
+        self.assertTrue(folder.enabled)
+
+    def test_toggle_requires_post(self):
+        folder = self.make_folder()
+        response = self.client.get(reverse("watcher:folder-toggle", args=[folder.pk]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_export_returns_json_config(self):
+        self.make_folder(name="a", path="/tmp/a", branch="main", enabled=False)
+        self.make_folder(name="b", path="/tmp/b")
+        response = self.client.get(reverse("watcher:folders-export"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"], "application/json"
+        )
+        payload = response.json()
+        self.assertEqual(payload["app"], "vibe-watcher")
+        self.assertEqual(len(payload["folders"]), 2)
+        by_path = {f["path"]: f for f in payload["folders"]}
+        self.assertEqual(by_path["/tmp/a"]["branch"], "main")
+        self.assertFalse(by_path["/tmp/a"]["enabled"])
+        self.assertTrue(by_path["/tmp/b"]["enabled"])
+
+    def test_import_restores_folders(self):
+        import io
+        import json as jsonlib
+
+        config = {
+            "app": "vibe-watcher",
+            "version": 1,
+            "folders": [
+                {"name": "a", "path": "/tmp/a", "url": "", "branch": "main",
+                 "poll_interval": 60, "enabled": True},
+                {"name": "b", "path": "/tmp/b", "url": "", "branch": "",
+                 "poll_interval": 30, "enabled": False},
+            ],
+        }
+        upload = io.BytesIO(jsonlib.dumps(config).encode())
+        upload.name = "config.json"
+        response = self.client.post(reverse("watcher:folders-import"), {"config": upload})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, {"created": 2, "updated": 0, "skipped": 0})
+        self.assertEqual(Folder.objects.count(), 2)
+        a = Folder.objects.get(path="/tmp/a")
+        self.assertEqual(a.branch, "main")
+        b = Folder.objects.get(path="/tmp/b")
+        self.assertFalse(b.enabled)
+
+    def test_import_updates_existing_folders(self):
+        import io
+        import json as jsonlib
+
+        self.make_folder(name="old", path="/tmp/a", poll_interval=300)
+        config = {
+            "folders": [
+                {"name": "new", "path": "/tmp/a", "branch": "dev",
+                 "poll_interval": 45, "enabled": False},
+            ],
+        }
+        upload = io.BytesIO(jsonlib.dumps(config).encode())
+        upload.name = "config.json"
+        response = self.client.post(reverse("watcher:folders-import"), {"config": upload})
+        data = response.json()
+        self.assertEqual(data, {"created": 0, "updated": 1, "skipped": 0})
+        folder = Folder.objects.get(path="/tmp/a")
+        self.assertEqual(folder.name, "new")
+        self.assertEqual(folder.branch, "dev")
+        self.assertEqual(folder.poll_interval, 45)
+        self.assertFalse(folder.enabled)
+
+    def test_import_rejects_garbage(self):
+        import io
+
+        upload = io.BytesIO(b"not json at all")
+        upload.name = "config.json"
+        response = self.client.post(reverse("watcher:folders-import"), {"config": upload})
+        self.assertEqual(response.status_code, 400)
+
+        upload2 = io.BytesIO(b'{"nope": true}')
+        upload2.name = "config.json"
+        response = self.client.post(reverse("watcher:folders-import"), {"config": upload2})
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(reverse("watcher:folders-import"), {})
+        self.assertEqual(response.status_code, 400)
+
+    def test_index_renders_switch_and_icons(self):
+        self.make_folder()
+        response = self.client.get(reverse("watcher:index"))
+        self.assertContains(response, "switch on")
+        self.assertContains(response, "toggle-form")
+        self.assertContains(response, "icon-btn")
+        self.assertContains(response, "folders/export/")
+        self.assertContains(response, "folders/import/")

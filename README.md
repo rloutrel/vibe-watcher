@@ -177,6 +177,18 @@ does not have. Options, in order of reliability:
 3. Set `WATCHER_NOTIFY_BACKEND=none` on headless machines; events still show
    in the web UI.
 
+## Folder management
+
+- **ON/OFF switch**: each folder row has a toggle — green = watching, grey =
+  paused. Flipping it enables/disables the folder without deleting it.
+- **Icon actions**: ✏️ edits, 🗑️ deletes (with a confirmation prompt).
+- **Backup / restore**: *Export config* downloads `vibe-watcher-config.json`
+  with all folders (path, branch, interval, enabled, url); *Import config*
+  re-uploads it — folders are matched by path: existing ones are updated,
+  missing ones are recreated. Use it to recover your setup after a database
+  loss or to move the watcher to another machine. Snapshots and events are
+  not part of the backup.
+
 ## Branch selection
 
 Each folder has an optional **Branch** field:

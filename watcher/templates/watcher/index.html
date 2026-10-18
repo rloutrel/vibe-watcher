@@ -1,6 +1,5 @@
 {% extends "watcher/base.html" %}
 {% block content %}
-
 <section>
   <h2>Watcher status</h2>
   <p>
@@ -24,11 +23,22 @@
 <section>
   <h2>Folders <a class="btn" href="{% url 'watcher:folder-create' %}">Add folder</a></h2>
   <table>
-    <tr><th>Name</th><th>Path</th><th>Branch</th><th>Interval</th><th>Latest state</th><th></th></tr>
+    <tr><th>ON/OFF</th><th>Name</th><th>Path</th><th>Branch</th><th>Interval</th><th>Latest state</th><th>Actions</th></tr>
     {% for folder, snapshot in rows %}
-      <tr>
+      <tr data-folder-row="{{ folder.pk }}">
+        <td>
+          <form method="post" action="{% url 'watcher:folder-toggle' folder.pk %}" class="inline toggle-form">
+            {% csrf_token %}
+            <button type="submit"
+                    class="switch {% if folder.enabled %}on{% else %}off{% endif %}"
+                    title="{% if folder.enabled %}Disable watching{% else %}Enable watching{% endif %}">
+              <span class="knob"></span>
+            </button>
+          </form>
+        </td>
         <td>{{ folder.name }}{% if not folder.enabled %} <span class="muted">(disabled)</span>{% endif %}</td>
-        <td><code>{{ folder.path }}</code></td><td>{{ folder.branch|default:"(checked-out)" }}</td>
+        <td><code>{{ folder.path }}</code></td>
+        <td>{{ folder.branch|default:"(checked-out)" }}</td>
         <td>{{ folder.poll_interval }}s</td>
         <td>
           {% if snapshot %}
@@ -39,14 +49,28 @@
           {% endif %}
         </td>
         <td>
-          <a class="btn" href="{% url 'watcher:folder-update' folder.pk %}">Edit</a>
-          <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline">{% csrf_token %}<button class="btn danger" type="submit">Delete</button></form>
+          <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="Edit">✏️</a>
+          <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
+            {% csrf_token %}
+            <button class="icon-btn" type="submit" title="Delete">🗑️</button>
+          </form>
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="muted">No folders yet.</td></tr>
+      <tr><td colspan="7" class="muted">No folders yet.</td></tr>
     {% endfor %}
   </table>
+</section>
+
+<section>
+  <h2>Backup</h2>
+  <p class="muted">Save the folder configuration to restore it after a reinstall or database loss.</p>
+  <a class="btn" href="{% url 'watcher:folders-export' %}" download="vibe-watcher-config.json">⬇ Export config</a>
+  <form method="post" action="{% url 'watcher:folders-import' %}" enctype="multipart/form-data" class="inline">
+    {% csrf_token %}
+    <input type="file" name="config" accept="application/json" required>
+    <button class="btn" type="submit">⬆ Import config</button>
+  </form>
 </section>
 
 <section>
@@ -65,4 +89,28 @@
     {% endfor %}
   </table>
 </section>
+
+<script>
+(function () {
+  document.querySelectorAll(".toggle-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      fetch(form.action, {
+        method: "POST",
+        headers: {"X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value},
+        body: new FormData()
+      }).then(function (r) {
+        if (r.ok) { window.location.reload(); }
+      });
+    });
+  });
+  document.querySelectorAll(".delete-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      if (!confirm("Delete this folder from the watcher?")) {
+        ev.preventDefault();
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}
