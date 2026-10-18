@@ -545,3 +545,31 @@ class BranchSelectionTests(TestCase, RepoFixture):
         self.client.login(username="dave", password="pw")
         response = self.client.get(reverse("watcher:branches-for-path"))
         self.assertEqual(response.status_code, 400)
+
+
+class AuthTemplateTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user("erin", password="pw")
+        self.client = django_test.Client()
+
+    def test_login_page_renders(self):
+        response = self.client.get(reverse("login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Log in")
+
+    def test_login_flow(self):
+        response = self.client.post(
+            reverse("login"),
+            {"username": "erin", "password": "pw"},
+        )
+        self.assertEqual(response.status_code, 302)
+        response = self.client.get(reverse("watcher:index"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_logout_redirects_to_index(self):
+        self.client.login(username="erin", password="pw")
+        response = self.client.post(reverse("logout"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("watcher:index"))

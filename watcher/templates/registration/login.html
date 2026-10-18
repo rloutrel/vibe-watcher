@@ -1,0 +1,12 @@
+{% extends "watcher/base.html" %}
+{% block content %}
+<h2>Log in</h2>
+<form method="post">
+  {% csrf_token %}
+  <table>{{ form.as_table }}</table>
+  <button class="btn" type="submit">Log in</button>
+</form>
+{% if form.errors %}
+<p class="muted">Your username and password didn't match. Please try again.</p>
+{% endif %}
+{% endblock %}
