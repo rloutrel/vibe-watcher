@@ -33,7 +33,18 @@ python manage.py runserver          # terminal 1: web UI at http://127.0.0.1:800
 python manage.py watch_folders      # terminal 2: watcher loop
 ```
 
-Add folders in the UI (`/` → *Add folder*) or via `/admin/`. Each folder
+Add folders in the UI (`/` → *Add folder*) or via `/admin/`.
+
+**Quick add**: type just the path (with `~` supported — it's expanded
+server-side against the watcher user's home) and leave the other fields
+empty. When the path field loses focus, the form autodetects the repo:
+name (from the directory), checked-out branch, remote URL, and available
+branches. If the path isn't a git repo, you can still fill the fields
+manually — autodetection reports errors but never blocks saving. The name
+is also derived from the path server-side on submit, so posting a bare path
+works too.
+
+Each folder
 can optionally select a specific **branch to watch**: the branch picker lists
 everything available in the repo (local and remote, via `git branch -a`);
 leave it empty to watch the currently checked-out branch.

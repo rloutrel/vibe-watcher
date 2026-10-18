@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST, require_GET
 
 from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
-from .git import GitError, GitRepo
+from .git import GitError, GitRepo, detect_repo
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus
 
 
@@ -47,6 +47,21 @@ def index(request):
             "watcher": watcher_status(),
         },
     )
+
+
+@login_required
+@require_GET
+def detect_folder(request):
+    """Quick add: autodetect repo info from an entered path.
+
+    Handles ``~`` expansion server-side, so a path like ``~/code/my-repo``
+    resolves against the watcher user's home. Returns resolved path, repo
+    name (directory basename), checked-out branch, remote URL, and branches.
+    """
+    raw = request.GET.get("path", "").strip()
+    if not raw:
+        return JsonResponse({"error": "missing path"}, status=400)
+    return JsonResponse(detect_repo(raw))
 
 
 @login_required

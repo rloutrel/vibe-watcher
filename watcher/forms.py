@@ -1,6 +1,7 @@
 from django import forms
 
 from .consts import DEFAULT_POLL_INTERVAL, MAX_INTERVAL
+from .git import expand_path
 from .models import Folder
 
 
@@ -9,8 +10,8 @@ class FolderForm(forms.ModelForm):
         model = Folder
         fields = ["name", "path", "url", "branch", "poll_interval", "enabled"]
         widgets = {
-            "path": forms.TextInput(attrs={"placeholder": "/home/me/code/my-repo"}),
-            "url": forms.TextInput(attrs={"placeholder": "https://github.com/me/my-repo (optional)"}),
+            "path": forms.TextInput(attrs={"placeholder": "~/code/my-repo or /home/me/code/my-repo"}),
+            "url": forms.TextInput(attrs={"placeholder": "https://github.com/me/my-repo (optional, autodetected)"}),
             "branch": forms.TextInput(
                 attrs={
                     "placeholder": "Leave empty for the checked-out branch",
@@ -18,6 +19,18 @@ class FolderForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Quick add: the name is autodetected from the repo directory if blank.
+        self.fields["name"].required = False
+        self.fields["name"].widget.attrs["placeholder"] = "Leave empty to autodetect from the path"
+
+    def clean_path(self):
+        raw = self.cleaned_data.get("path", "").strip()
+        if not raw:
+            raise forms.ValidationError("Path is required.")
+        return expand_path(raw)
 
     def clean_poll_interval(self):
         value = self.cleaned_data.get("poll_interval")
@@ -28,3 +41,15 @@ class FolderForm(forms.ModelForm):
                 f"Poll interval must be between 1 and {MAX_INTERVAL} seconds."
             )
         return value
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned:
+            return cleaned
+        # Quick add: derive the name from the repo directory when left blank.
+        if not cleaned.get("name"):
+            path = cleaned.get("path", "").rstrip("/")
+            cleaned["name"] = path.split("/")[-1] if path else ""
+            if not cleaned["name"]:
+                self.add_error("name", "Name is required (could not derive it from the path).")
+        return cleaned

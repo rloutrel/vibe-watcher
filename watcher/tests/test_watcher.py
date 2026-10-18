@@ -573,3 +573,88 @@ class AuthTemplateTests(TestCase):
         response = self.client.post(reverse("logout"))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("watcher:index"))
+
+
+class QuickAddTests(TestCase, RepoFixture):
+    def test_expand_path_tilde(self):
+        from watcher.git import expand_path
+        import os
+
+        self.assertEqual(expand_path("/abs/path"), "/abs/path")
+        self.assertEqual(expand_path(" ~/code/x "), os.path.expanduser("~/code/x"))
+
+    @mock.patch("watcher.git.GitRepo")
+    def test_detect_repo(self, GitRepoMock):
+        from watcher.git import detect_repo
+
+        repo = GitRepoMock.return_value
+        repo.current_branch.return_value = "main"
+        repo.remote_url.return_value = "https://github.com/me/my-repo.git"
+        repo.list_branches.return_value = ["main", "origin/dev"]
+        info = detect_repo("~/code/my-repo")
+        import os
+
+        self.assertEqual(info["path"], os.path.expanduser("~/code/my-repo"))
+        self.assertEqual(info["name"], "my-repo")
+        self.assertEqual(info["branch"], "main")
+        self.assertEqual(info["url"], "https://github.com/me/my-repo.git")
+        self.assertEqual(info["branches"], ["main", "origin/dev"])
+        self.assertEqual(info["error"], "")
+
+    @mock.patch("watcher.git.GitRepo")
+    def test_detect_repo_error_is_reported(self, GitRepoMock):
+        from watcher.git import detect_repo
+
+        repo = GitRepoMock.return_value
+        repo.current_branch.side_effect = GitError("not a git repository")
+        info = detect_repo("/tmp/not-a-repo")
+        self.assertEqual(info["error"], "not a git repository")
+        self.assertEqual(info["branches"], [])
+
+    @mock.patch("watcher.views.detect_repo")
+    def test_detect_endpoint(self, detect_mock):
+        from django.contrib.auth.models import User
+
+        detect_mock.return_value = {
+            "path": "/home/me/code/my-repo",
+            "name": "my-repo",
+            "branch": "main",
+            "url": "https://github.com/me/my-repo",
+            "branches": ["main"],
+            "error": "",
+        }
+        User.objects.create_user("frank", password="pw")
+        self.client.login(username="frank", password="pw")
+        response = self.client.get(
+            reverse("watcher:folder-detect"), {"path": "~/code/my-repo"}
+        )
+        self.assertEqual(response.status_code, 200)
+        detect_mock.assert_called_with("~/code/my-repo")
+        self.assertEqual(response.json()["name"], "my-repo")
+
+    def test_detect_endpoint_requires_path(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("gina", password="pw")
+        self.client.login(username="gina", password="pw")
+        response = self.client.get(reverse("watcher:folder-detect"))
+        self.assertEqual(response.status_code, 400)
+
+    @mock.patch("watcher.forms.expand_path")
+    def test_form_expands_tilde_and_derives_name(self, expand_mock):
+        expand_mock.side_effect = lambda p: "/home/me/code/" + p.strip("~/")
+        from watcher.forms import FolderForm
+
+        form = FolderForm(
+            data={
+                "name": "",
+                "path": "~/code/my-repo",
+                "url": "",
+                "branch": "",
+                "poll_interval": 300,
+                "enabled": "on",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["path"], "/home/me/code/code/my-repo")
+        self.assertEqual(form.cleaned_data["name"], "my-repo")

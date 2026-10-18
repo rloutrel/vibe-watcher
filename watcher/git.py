@@ -227,3 +227,41 @@ class GitRepo:
             "commits_behind": behind,
             "upstream_changed": bool(upstream and behind > 0),
         }
+
+
+def expand_path(path):
+    """Expand ``~`` and environment variables in a user-entered path.
+
+    Runs in the watcher process, so ``~`` resolves against the service user's
+    home (or the logged-in desktop user in systemd user mode).
+    """
+    import os
+
+    return os.path.expandvars(os.path.expanduser(path.strip()))
+
+
+def detect_repo(path):
+    """Best-effort repo info for the quick-add flow.
+
+    Returns a dict with resolved path, repo name, default branch, remote URL,
+    and available branches. Never raises GitError — errors are reported in
+    the ``error`` key so the UI can fall back to manual entry.
+    """
+    info = {
+        "path": expand_path(path),
+        "name": "",
+        "branch": "",
+        "url": "",
+        "branches": [],
+        "error": "",
+    }
+    repo = GitRepo(info["path"])
+    try:
+        current = repo.current_branch()
+        info["name"] = info["path"].rstrip("/").split("/")[-1] or "folder"
+        info["branch"] = current
+        info["url"] = repo.remote_url()
+        info["branches"] = repo.list_branches()
+    except GitError as exc:
+        info["error"] = str(exc)
+    return info

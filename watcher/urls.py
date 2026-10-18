@@ -11,4 +11,5 @@ urlpatterns = [
     path("folders/<int:pk>/delete/", views.folder_delete, name="folder-delete"),
     path("folders/<int:pk>/branches/", views.folder_branches, name="folder-branches"),
     path("folders/branches/", views.branches_for_path, name="branches-for-path"),
+    path("folders/detect/", views.detect_folder, name="folder-detect"),
 ]
