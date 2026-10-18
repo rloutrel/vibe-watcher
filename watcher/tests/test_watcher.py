@@ -1198,3 +1198,100 @@ class CheckNowTests(TestCase, RepoFixture):
         response = self.client.get(reverse("watcher:index"))
         self.assertContains(response, "check-form")
         self.assertContains(response, "title=\"Check now\"")
+
+
+class AutoPullTests(TestCase, RepoFixture):
+    def make_folder_auto(self, command="docker compose up --build -d"):
+        return self.make_folder(
+            name="auto",
+            path="/tmp/auto",
+            auto_pull=True,
+            post_pull_command=command,
+        )
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_pull_and_command_run_on_change(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=2, head="cafe11", branch="main"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        run_cmd_mock.return_value = (True, "Container started", "")
+        folder = self.make_folder_auto()
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        fake.pull_ff_only.assert_called_once()
+        run_cmd_mock.assert_called_once()
+        called_folder, called_command = run_cmd_mock.call_args[0]
+        self.assertEqual(called_command, "docker compose up --build -d")
+        self.assertIn("Pulled and restarted.", backend.notifications[0][1])
+        event = WatcherEvent.objects.filter(kind="change").first()
+        self.assertTrue(event.detail["pulled"])
+        self.assertTrue(event.detail["command_ok"])
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_pull_failure_reports_and_skips_command(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=2, head="cafe11"))
+        fake.pull_ff_only = mock.Mock(side_effect=GitError("not a fast-forward"))
+        GitRepoMock.return_value = fake
+        folder = self.make_folder_auto()
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        fake.pull_ff_only.assert_called_once()
+        run_cmd_mock.assert_not_called()
+        self.assertIn("Auto-pull failed", backend.notifications[0][1])
+        event = WatcherEvent.objects.filter(kind="change").first()
+        self.assertFalse(event.detail["pulled"])
+        self.assertTrue(event.detail["pull_error"])
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_no_pull_when_auto_pull_off(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=2, head="cafe11"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(auto_pull=False, post_pull_command="echo hi")
+        scanner.scan_folder(folder, backend=FakeBackend())
+        fake.pull_ff_only.assert_not_called()
+        run_cmd_mock.assert_not_called()
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_pull_without_command(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=2, head="cafe11"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(auto_pull=True, post_pull_command="")
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        fake.pull_ff_only.assert_called_once()
+        run_cmd_mock.assert_not_called()
+        self.assertIn("Pulled.", backend.notifications[0][1])
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_command_failure_reported(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=2, head="cafe11"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        run_cmd_mock.return_value = (False, "", "compose: command not found")
+        folder = self.make_folder_auto()
+        scanner.scan_folder(folder, backend=FakeBackend())
+        event = WatcherEvent.objects.filter(kind="change").first()
+        self.assertTrue(event.detail["pulled"])
+        self.assertFalse(event.detail["command_ok"])
+        self.assertIn("compose", event.detail["post_pull_command"])
+
+    @mock.patch("watcher.actions.subprocess")
+    def test_run_post_pull_command_invocation(self, subprocess_mod):
+        from watcher.actions import run_post_pull_command
+
+        subprocess_mod.run.return_value = mock.Mock(
+            returncode=0, stdout="ok out", stderr=""
+        )
+        folder = self.make_folder(path="/tmp/with-compose")
+        ok, out, err = run_post_pull_command(folder, "docker compose up --build -d")
+        self.assertTrue(ok)
+        args, kwargs = subprocess_mod.run.call_args
+        self.assertEqual(args[0][:3], ["sh", "-c", "docker compose up --build -d"])
+        self.assertEqual(kwargs["cwd"], "/tmp/with-compose")

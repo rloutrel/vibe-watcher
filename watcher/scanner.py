@@ -12,6 +12,7 @@ from django.db import close_old_connections
 from django.utils import timezone
 
 from .consts import HEARTBEAT_INTERVAL
+from .actions import apply_updates
 from .git import GitError, GitRepo
 from .models import Folder, NotifiedCommit, Snapshot, WatcherEvent, WatcherStatus
 from .notify import get_notification_backend
@@ -112,10 +113,19 @@ def scan_folder(folder, repo=None, backend=None):
                 detail={"head": head, "dup": True},
             )
         else:
+            action_result = apply_updates(folder, repo, state)
+            if action_result["pulled"] and action_result["command_ok"]:
+                follow_up = "Pulled and restarted."
+            elif action_result["pulled"]:
+                follow_up = "Pulled."
+            elif action_result["pull_error"]:
+                follow_up = f"Auto-pull failed: {action_result['pull_error']}"
+            else:
+                follow_up = "Run git pull to update your local copy."
             summary = f"{folder.name} has updates"
             body = (
                 f"{state['commits_behind']} new commit(s) on {state['upstream']}. "
-                f"Run git pull to update your local copy."
+                f"{follow_up}"
             )
             result = backend.notify(
                 summary,
@@ -147,7 +157,13 @@ def scan_folder(folder, repo=None, backend=None):
                 "change",
                 f"{folder.name}: upstream changed ({state['commits_behind']} behind)",
                 folder=folder,
-                detail={"head": head},
+                detail={
+                    "head": head,
+                    "pulled": action_result["pulled"],
+                    "pull_error": action_result["pull_error"],
+                    "post_pull_command": action_result["command"],
+                    "command_ok": action_result["command_ok"],
+                },
             )
     else:
         logger.info(

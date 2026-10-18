@@ -229,6 +229,17 @@ class GitRepo:
     def safe_to_pull(self):
         return self.status_is_clean()
 
+    def pull_ff_only(self, branch=None):
+        """Fast-forward-only pull: never creates merges or conflicts.
+
+        Raises GitError if the pull is not a fast-forward (local commits
+        diverge) or the working tree is dirty — the user must intervene.
+        """
+        if branch and branch != self.current_branch():
+            # Pull the watched remote-tracking ref into the local branch.
+            run_git(self.path, "fetch", "origin", f"{branch}:{branch}", check=False)
+        return run_git(self.path, "pull", "--ff-only", "--quiet")
+
     def fetch(self):
         """Fetch the remote so remote-tracking refs reflect reality.
 

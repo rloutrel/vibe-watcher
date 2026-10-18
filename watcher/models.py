@@ -33,6 +33,18 @@ class Folder(models.Model):
         default=DEFAULT_POLL_INTERVAL,
         help_text="Seconds between polls for this folder.",
     )
+    auto_pull = models.BooleanField(
+        default=False,
+        help_text="Run git pull --ff-only automatically when the remote changes.",
+    )
+    post_pull_command = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Shell command executed in the folder after a successful pull "
+            "(e.g. docker compose up --build -d)."
+        ),
+    )
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -60,6 +72,8 @@ class Folder(models.Model):
             "url": self.url,
             "branch": self.branch,
             "poll_interval": self.poll_interval,
+            "auto_pull": self.auto_pull,
+            "post_pull_command": self.post_pull_command,
             "enabled": self.enabled,
         }
 
