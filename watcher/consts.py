@@ -1,5 +1,5 @@
 # Polling defaults (seconds)
-DEFAULT_POLL_INTERVAL = 300
+DEFAULT_POLL_INTERVAL = 30
 MAX_INTERVAL = 7 * 24 * 3600
 
 # Notification dedup

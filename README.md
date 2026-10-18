@@ -79,7 +79,7 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_APP_NAME` | `vibe-watcher` | `-a` app name passed to notify-send |
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |
-| `WATCHER_DEFAULT_POLL_INTERVAL` | `300` | Default per-folder poll interval |
+| `WATCHER_DEFAULT_POLL_INTERVAL` | `30` | Default per-folder poll interval |
 | `WATCHER_GIT_TIMEOUT` | `120` | Max seconds for one git invocation |
 | `WATCHER_LOG_LEVEL` | `INFO` | Log level for the JSON stdout logger |
 
