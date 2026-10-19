@@ -11,23 +11,6 @@
   <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
 </form>
 
-<div id="picker-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:10;" hidden>
-  <div id="picker" style="background:#fff; border-radius:8px; max-width:34rem; margin:4rem auto; padding:1rem 1.25rem; max-height:70vh; display:flex; flex-direction:column;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem;">
-      <strong>Choose a folder</strong>
-      <button type="button" class="btn" id="picker-close">✕</button>
-    </div>
-    <code id="picker-path" class="muted" style="margin-bottom:.5rem; display:block;"></code>
-    <div id="picker-list" style="overflow-y:auto; flex:1; border:1px solid #e5e7eb; border-radius:6px;"></div>
-    <div style="margin-top:.75rem; display:flex; gap:.5rem;">
-      <button type="button" class="btn" id="picker-up">⬆ Up</button>
-      <button type="button" class="btn" id="picker-home">🏠 Home</button>
-      <button type="button" class="btn" id="picker-find">🔍 Find projects</button>
-      <button type="button" class="btn" id="picker-select" style="margin-left:auto;">Select this folder</button>
-    </div>
-  </div>
-</div>
-
 <script>
 (function () {
   var form = document.getElementById("folder-form");
@@ -38,14 +21,8 @@
   var errorEl = document.getElementById("branch-error");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
   var detectUrl = "{% url 'watcher:folder-detect' %}";
-  var browseUrl = "{% url 'watcher:folder-browse' %}";
   var findUrl = "{% url 'watcher:folder-find' %}";
   var savedBranch = "{{ folder.branch|default:'' }}";
-
-  var overlay = document.getElementById("picker-overlay");
-  var listEl = document.getElementById("picker-list");
-  var pathEl = document.getElementById("picker-path");
-  var currentPath = null;
 
   function showError(message) {
     if (message) { errorEl.textContent = message; errorEl.style.display = "block"; }
@@ -53,10 +30,7 @@
   }
 
   function setBranchOptions(data) {
-    if (data && data.error) {
-      showError(data.error);
-      return;
-    }
+    if (data && data.error) { showError(data.error); return; }
     var branches = (data && data.branches) || [];
     var placeholder = branchSelect.getAttribute("data-placeholder") || "";
     branchSelect.innerHTML = "";
@@ -85,15 +59,12 @@
     showError((data && data.no_remote_error) || "");
   }
 
-  function loadBranches() {
-    if (!pathInput.value.trim()) return Promise.resolve(null);
-    return fetch(branchesUrl + "?path=" + encodeURIComponent(pathInput.value))
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; });
-  }
-
   function refreshBranches() {
-    loadBranches().then(function (data) { if (data) setBranchOptions(data); });
+    if (!pathInput.value.trim()) return;
+    fetch(branchesUrl + "?path=" + encodeURIComponent(pathInput.value))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data) setBranchOptions(data); })
+      .catch(function () {});
   }
 
   function autodetect() {
@@ -110,106 +81,65 @@
       .catch(function () {});
   }
 
-  // ---- picker ----
-  function openPicker(startPath) {
-    overlay.style.display = "block";
-    overlay.hidden = false;
-    loadPicker(startPath || pathInput.value.trim() || "~");
-  }
-  function closePicker() { overlay.style.display = "none"; overlay.hidden = true; }
+  // ---- project dropdown ----
+  var projectSelect = document.createElement("select");
+  projectSelect.id = "id_project";
+  projectSelect.style.marginLeft = ".4rem";
+  var refreshBtn = document.createElement("button");
+  refreshBtn.type = "button";
+  refreshBtn.className = "btn";
+  refreshBtn.textContent = "🔄";
+  refreshBtn.title = "Refresh project list";
+  pathInput.insertAdjacentElement("afterend", refreshBtn);
+  refreshBtn.insertAdjacentElement("afterend", projectSelect);
 
-  function loadPicker(path) {
-    fetch(browseUrl + "?path=" + encodeURIComponent(path))
-      .then(function (r) { return r.ok ? r.json() : { error: "cannot list" }; })
-      .then(function (data) {
-        if (data.error) { listEl.innerHTML = ""; pathEl.textContent = data.error; return; }
-        currentPath = data.path;
-        pathEl.textContent = data.path;
-        listEl.innerHTML = "";
-        data.dirs.forEach(function (name) {
-          var row = document.createElement("button");
-          row.type = "button";
-          row.className = "picker-entry";
-          row.textContent = "📁 " + name;
-          row.dataset.name = name;
-          listEl.appendChild(row);
-        });
-        if (!data.dirs.length) {
-          listEl.innerHTML = '<p class="muted" style="padding:.5rem">No subdirectories.</p>';
-        }
-      })
-      .catch(function () {});
-  }
-
-  listEl.addEventListener("click", function (ev) {
-    var row = ev.target.closest(".picker-entry");
-    if (!row) return;
-    if (row.dataset.path) {
-      pathInput.value = row.dataset.path;
-      closePicker();
-      autodetect();
-      return;
-    }
-    if (row.dataset.name && currentPath) {
-      loadPicker(currentPath.replace(/\/$/, "") + "/" + row.dataset.name);
-    }
-  });
-
-  function findProjects() {
-    var base = currentPath || pathInput.value.trim() || "~";
-    fetch(findUrl + "?path=" + encodeURIComponent(base))
+  function loadProjects() {
+    projectSelect.innerHTML = "";
+    var loading = document.createElement("option");
+    loading.textContent = "Loading projects…";
+    projectSelect.appendChild(loading);
+    fetch(findUrl)
       .then(function (r) { return r.ok ? r.json() : { error: "search failed" }; })
       .then(function (data) {
-        if (data.error && !data.projects) { pathEl.textContent = data.error; return; }
-        pathEl.textContent = "Git repositories under " + data.base;
-        currentPath = data.base;
-        listEl.innerHTML = "";
+        projectSelect.innerHTML = "";
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "— choose a project —";
+        projectSelect.appendChild(empty);
         (data.projects || []).forEach(function (p) {
-          var row = document.createElement("button");
-          row.type = "button";
-          row.className = "picker-entry";
-          row.dataset.path = p.path;
-          row.textContent = (p.registered ? "✅ " : "📦 ") + p.name + "  —  " + p.path;
-          listEl.appendChild(row);
+          var opt = document.createElement("option");
+          opt.value = p.path;
+          opt.textContent = (p.registered ? "✅ " : "📦 ") + p.name + " — " + p.path;
+          if (pathInput.value && p.path === pathInput.value) opt.selected = true;
+          projectSelect.appendChild(opt);
         });
-        if (data.error === "truncated") {
-          var note = document.createElement("p");
-          note.className = "muted"; note.style.padding = ".4rem .6rem";
-          note.textContent = "Results truncated (max 200).";
-          listEl.appendChild(note);
-        }
         if (!data.projects || !data.projects.length) {
-          listEl.innerHTML = '<p class="muted" style="padding:.5rem">No git repositories found.</p>';
+          var none = document.createElement("option");
+          none.textContent = data.error ? data.error : "No projects found";
+          none.disabled = true;
+          projectSelect.appendChild(none);
         }
       })
-      .catch(function () {});
+      .catch(function () {
+        projectSelect.innerHTML = "";
+        var err = document.createElement("option");
+        err.textContent = "Failed to load projects";
+        projectSelect.appendChild(err);
+      });
   }
-  document.getElementById("picker-find").addEventListener("click", findProjects);
-  document.getElementById("picker-up").addEventListener("click", function () {
-    if (currentPath) loadPicker(currentPath.replace(/\/[^/]*\/?$/, "") || "/");
-  });
-  document.getElementById("picker-home").addEventListener("click", function () { loadPicker("~"); });
-  document.getElementById("picker-close").addEventListener("click", closePicker);
-  overlay.addEventListener("click", function (ev) { if (ev.target === overlay) closePicker(); });
-  document.getElementById("picker-select").addEventListener("click", function () {
-    if (currentPath) { pathInput.value = currentPath; closePicker(); autodetect(); }
-  });
 
-  // Browse button next to the path field
-  var browseBtn = document.createElement("button");
-  browseBtn.type = "button";
-  browseBtn.className = "btn";
-  browseBtn.textContent = "📂 Browse…";
-  browseBtn.addEventListener("click", function () { openPicker(); });
-  pathInput.insertAdjacentElement("afterend", browseBtn);
+  projectSelect.addEventListener("change", function () {
+    if (projectSelect.value) {
+      pathInput.value = projectSelect.value;
+      autodetect();
+    }
+  });
+  refreshBtn.addEventListener("click", loadProjects);
 
   pathInput.addEventListener("blur", autodetect);
   pathInput.addEventListener("change", refreshBranches);
+  loadProjects();
   {% if not folder %}autodetect();{% else %}refreshBranches();{% endif %}
 })();
 </script>
-<style>
-  .picker-entry { display: block; width: 100%; text-align: left; padding: .3rem .6rem; border: none; background: none; cursor: pointer; font-size: .95rem; }
-  .picker-entry:hover { background: #f3f4f6; }
-</style>
 {% endblock %}

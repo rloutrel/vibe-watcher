@@ -35,12 +35,14 @@ python manage.py watch_folders      # terminal 2: watcher loop
 
 Add folders in the UI (`/` → *Add folder*) or via `/admin/`.
 
-**Folder picker**: click **📂 Browse…** next to the path field to
-navigate the filesystem in a picker dialog (directories only; Up/Home
-navigation). The **🔍 Find projects** button scans recursively (depth 3,
-max 200 results, skipping `node_modules`/venvs/etc.) for git repositories
-under the current directory and lists them — already-registered ones are
-marked ✅; click one to select it. Handy when you don't remember exact paths — and since
+**Project dropdown**: next to the path field, a dropdown lists the git
+repositories found under the projects base directory (loaded when the
+form opens; the 🔄 button refreshes it). The search is recursive
+(depth 3, max 200 results, skipping `node_modules`/venvs/etc.);
+already-registered projects are marked ✅. Selecting a project fills the
+path and triggers autodetection. The base directory defaults to `~` and
+is `VIBE_WATCHER_PROJECTS_BASE` (`/projects` in compose, i.e. the mount
+of `VIBE_WATCHER_PROJECTS_DIR`). Handy when you don't remember exact paths — and since
 listing goes through the watcher process, it shows the paths *it* can
 actually see (container-mapped in compose deployments).
 
@@ -106,6 +108,7 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
 | `VIBE_WATCHER_PATH_MAP` | unset | Comma-separated `host_prefix:container_prefix` pairs translating registered folder paths into the watcher's filesystem view (compose sets `$VIBE_WATCHER_PROJECTS_DIR:/projects`) |
 | `VIBE_WATCHER_PROJECTS_DIR` | `$HOME` | (compose) host base folder mounted at `/projects` in the containers |
+| `VIBE_WATCHER_PROJECTS_BASE` | `~` | Base directory scanned for the project dropdown (compose: `/projects`) |
 | `VIBE_WATCHER_FETCH_BEFORE_SCAN` | `1` | Run `git fetch --all` before each scan so remote changes are actually detected |
 | `VIBE_WATCHER_CONFIG_PATH` | unset | On-disk config copy the service rewrites on every folder change and restores from at startup when the DB is empty |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |

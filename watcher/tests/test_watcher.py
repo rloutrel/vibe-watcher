@@ -1864,3 +1864,36 @@ class FindProjectsTests(TestCase, RepoFixture):
 
         response = Client().get(reverse("watcher:folder-find"))
         self.assertEqual(response.status_code, 302)
+
+
+class ProjectsDropdownTests(TestCase, RepoFixture):
+    def setUp(self):
+        import os
+        import subprocess
+        import tempfile
+        import subprocess
+        import tempfile
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("nora", password="pw")
+        self.client.login(username="nora", password="pw")
+        self.base = tempfile.mkdtemp()
+        repo = os.path.join(self.base, "solo-repo")
+        os.makedirs(repo)
+        subprocess.run(["git", "init", "-q", repo], check=True, capture_output=True)
+
+    @override_settings(WATCHER_PROJECTS_BASE="/nonexistent-base")
+    def test_find_projects_defaults_to_configured_base(self):
+        response = self.client.get(reverse("watcher:folder-find"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not a directory", response.json()["error"])
+
+    def test_find_projects_default_is_home(self):
+        import os
+
+        with mock.patch("watcher.views.find_repos") as find_mock:
+            find_mock.return_value = ([os.path.expanduser("~/proj")], "")
+            response = self.client.get(reverse("watcher:folder-find"))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["base"], os.path.expanduser("~"))

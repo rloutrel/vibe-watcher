@@ -119,6 +119,10 @@ WATCHER_HEARTBEAT_STALE_AFTER = env_int("VIBE_WATCHER_HEARTBEAT_STALE_AFTER", 18
 # Default poll interval for folders (seconds).
 WATCHER_DEFAULT_POLL_INTERVAL = env_int("VIBE_WATCHER_DEFAULT_POLL_INTERVAL", 30)
 
+# Base directory scanned for project discovery in the folder form
+# (compose sets /projects, the mount of VIBE_WATCHER_PROJECTS_DIR).
+WATCHER_PROJECTS_BASE = os.environ.get("VIBE_WATCHER_PROJECTS_BASE", "~")
+
 # Fetch the remote before each scan so origin/* refs are current.
 WATCHER_FETCH_BEFORE_SCAN = env_bool("VIBE_WATCHER_FETCH_BEFORE_SCAN", True)
 
