@@ -521,9 +521,14 @@ def detect_repo(path):
         "branch": "",
         "url": "",
         "branches": [],
+        "has_remote": False,
+        "no_remote_error": "",
         "error": "",
     }
     repo = GitRepo(info["path"])
+    if not repo.is_repo():
+        info["error"] = "not a git repository"
+        return info
     try:
         current = repo.current_branch()
         info["name"] = info["path"].rstrip("/").split("/")[-1] or "folder"

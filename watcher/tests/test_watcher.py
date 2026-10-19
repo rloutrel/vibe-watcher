@@ -1744,3 +1744,56 @@ class TokenConfigTests(TestCase, RepoFixture):
             self.assertIn("token", out.getvalue().lower())
         finally:
             os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+
+
+class NotARepoMessageTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_detect_repo_distinguishes_not_a_repo(self, run_git_mock):
+        from watcher.git import detect_repo
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "--git-dir"):
+                return GitCommandResult([], stdout="", stderr="", returncode=128)
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        info = detect_repo("/tmp/plain-dir")
+        self.assertEqual(info["error"], "not a git repository")
+        self.assertEqual(info["no_remote_error"], "")
+        self.assertEqual(info["branches"], [])
+
+    @mock.patch("watcher.git.run_git")
+    def test_detect_repo_real_repo_without_remote(self, run_git_mock):
+        from watcher.git import detect_repo
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "--git-dir"):
+                return git_out(".git")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote", "get-url", "origin"):
+                return GitCommandResult([], stdout="", stderr="", returncode=2)
+            if cmd == ("remote",):
+                return git_out("")
+            if cmd and cmd[0] == "branch":
+                return git_out("main")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        info = detect_repo("/tmp/repo-no-remote")
+        self.assertEqual(info["error"], "")
+        self.assertFalse(info["has_remote"])
+        self.assertIn("no remote", info["no_remote_error"])
+
+    @mock.patch("watcher.views.GitRepo")
+    def test_branch_payload_not_a_repo(self, GitRepoViewMock):
+        from watcher.views import _branch_payload
+
+        repo = GitRepoViewMock.return_value
+        repo.is_repo.return_value = False
+        payload = _branch_payload(repo)
+        self.assertEqual(payload["error"], "not a git repository")
+        self.assertEqual(payload["no_remote_error"], "")
+        self.assertEqual(payload["branches"], [])

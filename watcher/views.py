@@ -74,6 +74,13 @@ def _branch_payload(repo):
     ``disabled`` — watching them cannot detect remote changes. When the repo
     has no remote at all, every entry is disabled and ``no_remote`` is set.
     """
+    if not repo.is_repo():
+        return {
+            "branches": [],
+            "has_remote": False,
+            "no_remote_error": "",
+            "error": "not a git repository",
+        }
     choices = repo.branch_choices()
     has_remote = repo.has_remote()
     payload = {

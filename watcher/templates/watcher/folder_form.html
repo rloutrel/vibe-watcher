@@ -51,6 +51,10 @@
   }
 
   function setBranchOptions(data) {
+    if (data && data.error) {
+      showError(data.error);
+      return;
+    }
     var branches = (data && data.branches) || [];
     var placeholder = branchSelect.getAttribute("data-placeholder") || "";
     branchSelect.innerHTML = "";
