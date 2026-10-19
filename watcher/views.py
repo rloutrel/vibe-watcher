@@ -143,7 +143,11 @@ def folder_update(request, pk):
     if request.method == "POST":
         form = FolderForm(request.POST, instance=folder)
         if form.is_valid():
-            form.save()
+            folder = form.save(commit=False)
+            if not form.cleaned_data.get("git_token"):
+                # empty password field = keep the existing token
+                folder.git_token = get_object_or_404(Folder, pk=pk).git_token
+            folder.save()
             return redirect("watcher:index")
     else:
         form = FolderForm(instance=folder)

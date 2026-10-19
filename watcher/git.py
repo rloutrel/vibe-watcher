@@ -125,8 +125,9 @@ def run_git(repo_path, *args, check=True):
 class GitRepo:
     """Read-only observation helpers for a local git checkout."""
 
-    def __init__(self, path):
+    def __init__(self, path, token=None):
         self.path = map_path(path)
+        self.token = token
 
     def _list_branches_cmd(self, extra_args):
         """Run ``git branch <extra_args>`` and return clean short names."""
@@ -445,7 +446,7 @@ class GitRepo:
         remote isn't convertible (non-GitHub hosts keep their scheme).
         """
         url = self.remote_url()
-        token = os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
+        token = self.token or os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
         if not token or not url:
             return None
         m = re.match(r"(?:ssh://)?(?:git@)([^:/]+)[:/](.+?)(?:\.git)?$", url)

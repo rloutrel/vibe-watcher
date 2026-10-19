@@ -1897,3 +1897,120 @@ class ProjectsDropdownTests(TestCase, RepoFixture):
             response = self.client.get(reverse("watcher:folder-find"))
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["base"], os.path.expanduser("~"))
+
+
+class PerProjectTokenTests(TestCase, RepoFixture):
+    def setUp(self):
+        import os
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("olga", password="pw")
+        self.client.login(username="olga", password="pw")
+        self._orig = os.environ.get("VIBE_WATCHER_GIT_TOKEN")
+
+    def tearDown(self):
+        import os
+
+        if self._orig is None:
+            os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+        else:
+            os.environ["VIBE_WATCHER_GIT_TOKEN"] = self._orig
+
+    @mock.patch("watcher.git.run_git")
+    def test_folder_token_overrides_global(self, run_git_mock):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "globaltok"
+        run_git_mock.side_effect = lambda *a, **k: git_out(
+            "git@github.com:me/my-repo.git"
+        )
+        repo = GitRepo("/tmp/fake", token="projecttok")
+        url = repo._https_url_with_token()
+        self.assertIn("projecttok@", url)
+        self.assertNotIn("globaltok", url)
+
+    @mock.patch("watcher.git.run_git")
+    def test_no_folder_token_uses_global(self, run_git_mock):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "globaltok"
+        run_git_mock.side_effect = lambda *a, **k: git_out(
+            "git@github.com:me/my-repo.git"
+        )
+        repo = GitRepo("/tmp/fake")
+        url = repo._https_url_with_token()
+        self.assertIn("globaltok@", url)
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_scanner_passes_folder_token(self, GitRepoMock):
+        GitRepoMock.return_value = FakeRepo(observe_result())
+        folder = self.make_folder(git_token="per-project-tok")
+        scanner.scan_folder(folder, backend=FakeBackend())
+        GitRepoMock.assert_called_with(folder.path, token="per-project-tok")
+
+    def test_token_not_in_export(self):
+        import json
+
+        self.make_folder(name="t", path="/tmp/t", git_token="secret-tok")
+        response = self.client.get(reverse("watcher:folders-export"))
+        payload = response.json()
+        dumped = json.dumps(payload)
+        self.assertNotIn("secret-tok", dumped)
+
+    def test_edit_empty_token_keeps_existing(self):
+        folder = self.make_folder(name="keep", path="/tmp/keep", git_token="tok-xyz")
+        response = self.client.post(
+            reverse("watcher:folder-update", args=[folder.pk]),
+            {
+                "name": "keep",
+                "path": "/tmp/keep",
+                "url": "",
+                "branch": "",
+                "poll_interval": 30,
+                "auto_pull": "",
+                "post_pull_command": "",
+                "git_token": "",
+                "enabled": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        folder.refresh_from_db()
+        self.assertEqual(folder.git_token, "tok-xyz")
+
+    def test_edit_new_token_replaces(self):
+        folder = self.make_folder(name="swap", path="/tmp/swap", git_token="old-tok")
+        response = self.client.post(
+            reverse("watcher:folder-update", args=[folder.pk]),
+            {
+                "name": "swap",
+                "path": "/tmp/swap",
+                "url": "",
+                "branch": "",
+                "poll_interval": 30,
+                "auto_pull": "",
+                "post_pull_command": "",
+                "git_token": "new-tok",
+                "enabled": "on",
+            },
+        )
+        folder.refresh_from_db()
+        self.assertEqual(folder.git_token, "new-tok")
+
+    def test_create_with_token(self):
+        response = self.client.post(
+            reverse("watcher:folder-create"),
+            {
+                "name": "new",
+                "path": "/tmp/new",
+                "url": "",
+                "branch": "",
+                "poll_interval": 30,
+                "auto_pull": "",
+                "post_pull_command": "",
+                "git_token": "fresh-tok",
+                "enabled": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Folder.objects.get(path="/tmp/new").git_token, "fresh-tok")

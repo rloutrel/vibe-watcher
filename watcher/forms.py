@@ -10,13 +10,17 @@ class FolderForm(forms.ModelForm):
         model = Folder
         fields = [
             "name", "path", "url", "branch", "poll_interval",
-            "auto_pull", "post_pull_command", "enabled",
+            "auto_pull", "post_pull_command", "git_token", "enabled",
         ]
         widgets = {
             "path": forms.TextInput(attrs={"placeholder": "~/code/my-repo or /home/me/code/my-repo"}),
             "url": forms.TextInput(attrs={"placeholder": "https://github.com/me/my-repo (optional, autodetected)"}),
             "post_pull_command": forms.TextInput(
                 attrs={"placeholder": "docker compose up --build -d (optional)"}
+            ),
+            "git_token": forms.PasswordInput(
+                render_value=False,
+                attrs={"placeholder": "Leave empty to use the global token"},
             ),
             "branch": forms.Select(
                 attrs={

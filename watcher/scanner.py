@@ -60,7 +60,7 @@ def scan_folder(folder, repo=None, backend=None):
     Returns the created Snapshot. Never raises GitError: failures are
     recorded on the snapshot and as an ``error`` event.
     """
-    repo = repo or GitRepo(folder.path)
+    repo = repo or GitRepo(folder.path, token=folder.git_token or None)
     backend = backend or get_notification_backend()
 
     if getattr(settings, "WATCHER_FETCH_BEFORE_SCAN", True):

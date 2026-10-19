@@ -45,6 +45,15 @@ class Folder(models.Model):
             "(e.g. docker compose up --build -d)."
         ),
     )
+    git_token = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Optional project-specific git token; overrides the global one "
+            "from the config page. Use a read-only token (e.g. GitHub "
+            "fine-grained PAT with Contents: Read-only)."
+        ),
+    )
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -76,6 +85,7 @@ class Folder(models.Model):
             "post_pull_command": self.post_pull_command,
             "enabled": self.enabled,
         }
+        # never serialize the token into exports/backups
 
 
 class Snapshot(models.Model):
