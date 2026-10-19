@@ -4,6 +4,10 @@ import datetime
 import json
 import logging
 
+RESERVED = set(
+    logging.makeLogRecord({}).__dict__
+) | {"message", "asctime", "taskName"}
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -17,6 +21,16 @@ class JSONFormatter(logging.Formatter):
             payload["exception"] = self.formatException(record.exc_info)
         for key, value in getattr(record, "extra_fields", {}).items():
             payload.setdefault(key, value)
+        # Structured fields passed via logger.info(..., extra={...}) land as
+        # plain record attributes; serialize everything the logger added.
+        for key, value in record.__dict__.items():
+            if key in RESERVED or key in payload:
+                continue
+            try:
+                json.dumps(value)
+                payload[key] = value
+            except (TypeError, ValueError):
+                payload[key] = repr(value)
         return json.dumps(payload)
 
 

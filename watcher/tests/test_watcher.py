@@ -2016,3 +2016,61 @@ class PerProjectTokenTests(TestCase, RepoFixture):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Folder.objects.get(path="/tmp/new").git_token, "fresh-tok")
+
+
+class JsonLoggingTests(TestCase, RepoFixture):
+    def test_extra_fields_in_json_logs(self):
+        import io
+        import json
+        import logging
+
+        from vibe_watcher.logging import JSONFormatter
+
+        logger = logging.getLogger("watcher.tests")
+        logger.setLevel(logging.WARNING)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JSONFormatter())
+        logger.addHandler(handler)
+        logger.propagate = False
+        try:
+            logger.warning(
+                "folder scan failed",
+                extra={
+                    "folder": "basil",
+                    "error": "not a git repository",
+                    "command": "git -C /projects/x rev-parse --git-dir",
+                    "resolved_path": "/projects/x",
+                },
+            )
+        finally:
+            logger.removeHandler(handler)
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(payload["message"], "folder scan failed")
+        self.assertEqual(payload["folder"], "basil")
+        self.assertEqual(payload["error"], "not a git repository")
+        self.assertEqual(payload["command"], "git -C /projects/x rev-parse --git-dir")
+        self.assertEqual(payload["resolved_path"], "/projects/x")
+
+    def test_std_log_records_stay_clean(self):
+        import io
+        import json
+        import logging
+
+        from vibe_watcher.logging import JSONFormatter
+
+        logger = logging.getLogger("watcher.tests.clean")
+        logger.setLevel(logging.INFO)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JSONFormatter())
+        logger.addHandler(handler)
+        logger.propagate = False
+        try:
+            logger.info("plain message")
+        finally:
+            logger.removeHandler(handler)
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(
+            set(payload.keys()), {"ts", "level", "logger", "message"}
+        )
