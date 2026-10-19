@@ -1,16 +1,91 @@
 {% extends "watcher/base.html" %}
 {% block content %}
-<h2>{% if folder %}Edit {{ folder.name }}{% else %}Add folder{% endif %}</h2>
+<div class="page-head">
+  <h2>{% if folder %}Edit {{ folder.name }}{% else %}Add folder{% endif %}</h2>
+</div>
+
 <form method="post" id="folder-form">
   {% csrf_token %}
-  <table>
-    {{ form.as_table }}
-  </table>
-  <p id="branch-error" class="muted" style="color: #dc2626; display: none;"></p>
-  <p id="find-status" class="muted"></p>
-  <button class="btn" type="submit">Save</button>
-  <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
+
+  <div class="card">
+    <label class="field-label" for="id_project">Project</label>
+    <div class="row">
+      <select id="id_project" class="grow"></select>
+      <button type="button" class="btn icon" id="refresh-projects" title="Refresh project list">⟳</button>
+    </div>
+    <p id="find-status" class="hint"></p>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="field">
+        <label class="field-label" for="id_name">Name</label>
+        {{ form.name }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="id_branch">Branch</label>
+        {{ form.branch }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="id_poll_interval">Poll interval (s)</label>
+        {{ form.poll_interval }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="id_post_pull_command">After pull</label>
+        {{ form.post_pull_command }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="id_git_token">Git token (private repos)</label>
+        {{ form.git_token }}
+      </div>
+    </div>
+    {{ form.path }}
+    <div class="switches">
+      <label class="switch-line">
+        <span>Auto-pull</span>
+        {{ form.auto_pull }}
+        <span class="switch"><span class="knob"></span></span>
+      </label>
+      <label class="switch-line">
+        <span>Enabled</span>
+        {{ form.enabled }}
+        <span class="switch"><span class="knob"></span></span>
+      </label>
+    </div>
+  </div>
+
+  <p id="branch-error" class="hint error" style="display: none;"></p>
+
+  <div class="actions">
+    <button class="btn primary" type="submit">Save</button>
+    <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
+  </div>
 </form>
+
+<style>
+  .page-head { margin-bottom: 1rem; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: .9rem 1rem; margin-bottom: .8rem; }
+  .field-label { display: block; font-size: .8rem; font-weight: 600; color: #374151; margin-bottom: .3rem; }
+  .field input, .field select, .row select { width: 100%; box-sizing: border-box; padding: .4rem .55rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: .95rem; background: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem .9rem; }
+  .row { display: flex; gap: .45rem; align-items: center; }
+  .grow { flex: 1; }
+  .btn.icon { padding: .4rem .6rem; line-height: 1; }
+  .hint { font-size: .8rem; color: #6b7280; margin: .4rem 0 0; }
+  .hint.error { color: #dc2626; }
+  .switches { display: flex; gap: 1.5rem; margin-top: .9rem; }
+  .switch-line { display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; font-size: .9rem; color: #374151; user-select: none; }
+  .switch-line input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; }
+  .switch { box-sizing: border-box; width: 2.4rem; height: 1.25rem; border-radius: 999px; border: none; background: #cbd5e1; position: relative; transition: background .15s ease; flex: none; }
+  .switch .knob { box-sizing: border-box; position: absolute; top: 50%; left: 2px; width: 1rem; height: 1rem; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transform: translateY(-50%); transition: left .15s ease; }
+  .switch-line input:checked + .switch { background: #16a34a; }
+  .switch-line input:checked + .switch .knob { left: calc(100% - 1rem - 2px); }
+  .switch-line input:focus-visible + .switch { outline: 2px solid #93c5fd; outline-offset: 2px; }
+  .actions { display: flex; gap: .5rem; margin-top: .4rem; }
+  .btn.primary { background: #111827; color: #fff; border-color: #111827; }
+  .btn.primary:hover { background: #1f2937; }
+  #id_project, #id_branch { max-width: 100%; }
+</style>
 
 <script>
 (function () {
@@ -20,18 +95,15 @@
   var branchSelect = form.querySelector("#id_branch");
   var errorEl = document.getElementById("branch-error");
   var statusEl = document.getElementById("find-status");
+  var projectSelect = document.getElementById("id_project");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
   var detectUrl = "{% url 'watcher:folder-detect' %}";
   var findUrl = "{% url 'watcher:folder-find' %}";
   var savedBranch = "{{ folder.branch|default:'' }}";
   var initialPath = "{{ folder.path|default:'' }}";
 
-  // The path is chosen via the project dropdown only: hide the raw input.
-  if (pathInput) {
-    var pathRow = pathInput.closest("tr");
-    if (pathRow) pathRow.style.display = "none";
-    pathInput.required = false;
-  }
+  // the path is chosen via the project dropdown only
+  pathInput.type = "hidden";
 
   function showError(message) {
     if (message) { errorEl.textContent = message; errorEl.style.display = "block"; }
@@ -89,24 +161,7 @@
       .catch(function () {});
   }
 
-  // ---- project dropdown ----
-  var projectSelect = document.createElement("select");
-  projectSelect.id = "id_project";
-  projectSelect.style.display = "none";
-  var refreshBtn = document.createElement("button");
-  refreshBtn.type = "button";
-  refreshBtn.className = "btn";
-  refreshBtn.textContent = "🔄 Refresh projects";
-  refreshBtn.style.display = "none";
-  var slot = pathRow || null;
-  if (slot) {
-    slot.insertAdjacentElement("afterend", refreshBtn);
-    refreshBtn.insertAdjacentElement("afterend", projectSelect);
-  }
-
   function loadProjects() {
-    projectSelect.style.display = "inline-block";
-    refreshBtn.style.display = "inline-block";
     projectSelect.innerHTML = "";
     var loading = document.createElement("option");
     loading.textContent = "Loading projects…";
@@ -151,7 +206,7 @@
       refreshBranches();
     }
   });
-  refreshBtn.addEventListener("click", loadProjects);
+  document.getElementById("refresh-projects").addEventListener("click", loadProjects);
 
   loadProjects();
   if (initialPath) { autodetect(); refreshBranches(); }
