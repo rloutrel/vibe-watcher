@@ -12,6 +12,7 @@ urlpatterns = [
     path("folders/<int:pk>/branches/", views.folder_branches, name="folder-branches"),
     path("folders/branches/", views.branches_for_path, name="branches-for-path"),
     path("folders/detect/", views.detect_folder, name="folder-detect"),
+    path("folders/browse/", views.browse_path, name="folder-browse"),
     path("folders/<int:pk>/toggle/", views.folder_toggle, name="folder-toggle"),
     path("folders/<int:pk>/check/", views.folder_check_now, name="folder-check-now"),
     path("folders/export/", views.folders_export, name="folders-export"),

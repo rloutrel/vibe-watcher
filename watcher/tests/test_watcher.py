@@ -1529,3 +1529,85 @@ class PathMapTests(TestCase, RepoFixture):
         self.assertEqual(
             subprocess_mod.run.call_args[1]["cwd"], "/home/hostuser/Basil/repo"
         )
+
+
+class BrowsePathTests(TestCase, RepoFixture):
+    def setUp(self):
+        import os
+        import tempfile
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("kim", password="pw")
+        self.client.login(username="kim", password="pw")
+        self.tmpdir = tempfile.mkdtemp()
+        for sub in ("repo-a", "repo-b", "not-a-dir.txt"):
+            full = os.path.join(self.tmpdir, sub)
+            if sub.endswith(".txt"):
+                open(full, "w").write("x")
+            else:
+                os.makedirs(full)
+
+    def test_browse_lists_directories_only(self):
+        response = self.client.get(
+            reverse("watcher:folder-browse"), {"path": self.tmpdir}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["dirs"], ["repo-a", "repo-b"])
+        self.assertNotIn("not-a-dir.txt", data["dirs"])
+        import os
+
+        self.assertEqual(data["parent"], os.path.dirname(self.tmpdir.rstrip("/")))
+
+    def test_browse_defaults_to_home(self):
+        import os
+
+        response = self.client.get(reverse("watcher:folder-browse"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(os.path.isabs(data["path"]))
+        self.assertIsInstance(data["dirs"], list)
+
+    def test_browse_invalid_path_returns_400(self):
+        response = self.client.get(
+            reverse("watcher:folder-browse"), {"path": "/definitely/not/here"}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_browse_requires_login(self):
+        from django.test import Client
+
+        Client().get(reverse("watcher:folder-browse"))
+        response = Client().get(reverse("watcher:folder-browse"))
+        self.assertEqual(response.status_code, 302)
+
+    @mock.patch("watcher.views.list_dir_entries")
+    def test_browse_applies_path_map(self, list_mock):
+        import os
+
+        list_mock.return_value = (["hostuser-dir"], "")
+        response = self.client.get(
+            reverse("watcher:folder-browse"), {"path": "/home/romain/Basil"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["dirs"], ["hostuser-dir"])
+
+    def test_list_dir_entries_maps_path(self):
+        import os
+
+        from watcher.git import list_dir_entries
+
+        host_dir = os.path.join(self.tmpdir, "host")
+        container_dir = os.path.join(self.tmpdir, "container")
+        os.makedirs(host_dir)
+        os.makedirs(container_dir)
+        os.makedirs(os.path.join(container_dir, "inside-container"))
+        os.environ["VIBE_WATCHER_PATH_MAP"] = f"{host_dir}:{container_dir}"
+        try:
+            dirs, error = list_dir_entries(host_dir)
+            self.assertEqual(error, "")
+            self.assertEqual(dirs, ["inside-container"])
+        finally:
+            os.environ.pop("VIBE_WATCHER_PATH_MAP", None)

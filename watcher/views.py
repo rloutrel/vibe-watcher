@@ -11,7 +11,8 @@ from django.views.decorators.http import require_POST, require_GET
 
 from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
-from .git import NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo
+from .git import (NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo,
+                  expand_path, list_dir_entries)
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus
 
 
@@ -151,6 +152,38 @@ def folder_delete(request, pk):
     if request.method == "POST":
         folder.delete()
     return redirect("watcher:index")
+
+
+BROWSE_ROOTS = ["~", "/"]
+
+
+@login_required
+@require_GET
+def browse_path(request):
+    """Directory picker backend: list subdirectories of a path.
+
+    Accepts ?path= (defaults to the home dir). Handles ~ expansion and
+    returns parent/children so the UI can navigate up and down. Only
+    directories are listed.
+    """
+    import os
+
+    raw = request.GET.get("path", "~")
+    target = expand_path(raw) if raw.startswith("~") else raw
+    dirs, error = list_dir_entries(target)
+    if dirs is None and raw != "~":
+        return JsonResponse({"error": error}, status=400)
+    if dirs is None:
+        return JsonResponse({"error": error}, status=400)
+
+    parent = os.path.dirname(target.rstrip("/")) or "/"
+    return JsonResponse(
+        {
+            "path": target,
+            "parent": parent if parent != target else None,
+            "dirs": dirs,
+        }
+    )
 
 
 @login_required

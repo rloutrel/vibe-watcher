@@ -61,6 +61,33 @@ def map_path(path):
     return path
 
 
+def list_dir_entries(path):
+    """List subdirectories of the *host* path (via the container mapping).
+
+    Returns (dirs, error): dirs are names of subdirectories sorted, plus
+    ".." handling done by the caller. Paths outside the mapped mount are
+    still listed when reachable — the watcher process's view is the truth.
+    """
+    import os
+
+    real = map_path(path)
+    if not os.path.isdir(real):
+        return None, f"not a directory: {path}"
+    dirs = []
+    try:
+        for entry in os.scandir(real):
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    dirs.append(entry.name)
+                elif entry.is_symlink() and os.path.isdir(os.path.join(real, entry.name)):
+                    dirs.append(entry.name)
+            except OSError:
+                continue
+    except OSError as exc:
+        return None, str(exc)
+    return sorted(dirs), ""
+
+
 def run_git(repo_path, *args, check=True):
     """Run a git command inside ``repo_path`` and return a GitCommandResult.
 

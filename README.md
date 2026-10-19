@@ -35,6 +35,12 @@ python manage.py watch_folders      # terminal 2: watcher loop
 
 Add folders in the UI (`/` → *Add folder*) or via `/admin/`.
 
+**Folder picker**: click **📂 Browse…** next to the path field to
+navigate the filesystem in a picker dialog (directories only; Up/Home
+navigation). Handy when you don't remember exact paths — and since
+listing goes through the watcher process, it shows the paths *it* can
+actually see (container-mapped in compose deployments).
+
 **Quick add**: type just the path (with `~` supported — it's expanded
 server-side against the watcher user's home) and leave the other fields
 empty. When the path field loses focus, the form autodetects the repo:
