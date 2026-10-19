@@ -540,3 +540,59 @@ def detect_repo(path):
     except GitError as exc:
         info["error"] = str(exc)
     return info
+
+
+def find_repos(base_path, max_depth=3, max_results=200):
+    """Recursively find git repositories under base_path.
+
+    Skips hidden and dependency-heavy directories (node_modules, .venv,
+    target, ...) and stops descending into a directory once it is itself a
+    repo (submodules still count as nested repos but aren't descended).
+    Returns (repos, truncated): repos is a list of absolute host paths.
+    """
+    import os
+
+    real_base = map_path(base_path)
+    if not os.path.isdir(real_base):
+        return None, f"not a directory: {base_path}"
+
+    skip_names = {"node_modules", "venv", ".venv", "target", "build",
+                  "dist", "__pycache__", ".tox", ".cache"}
+    repos = []
+    truncated = False
+
+    def walk(dir_path, depth):
+        nonlocal truncated
+        if len(repos) >= max_results:
+            truncated = True
+            return
+        try:
+            entries = sorted(os.scandir(dir_path), key=lambda e: e.name)
+        except OSError:
+            return
+        for entry in entries:
+            if len(repos) >= max_results:
+                truncated = True
+                return
+            name = entry.name
+            if name.startswith(".") and name not in (".git",):
+                if name != ".git":
+                    continue
+            full = os.path.join(dir_path, name)
+            if name == ".git":
+                repos.append(dir_path)
+                return
+            if name in skip_names:
+                continue
+            try:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            if depth + 1 < max_depth:
+                walk(full, depth + 1)
+            elif os.path.isdir(os.path.join(full, ".git")):
+                repos.append(full)
+
+    walk(real_base, 0)
+    return repos[:max_results], ("truncated" if truncated else "")

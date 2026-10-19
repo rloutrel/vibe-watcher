@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST, require_GET
 from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
 from .git import (NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo,
-                  expand_path, list_dir_entries)
+                  expand_path, find_repos, list_dir_entries)
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus, redact
 
 
@@ -339,3 +339,29 @@ def config_token_delete(request):
     AppSetting.objects.filter(key="git_token").delete()
     os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
     return redirect("watcher:config-page")
+
+
+@login_required
+@require_GET
+def find_projects(request):
+    """Find all git repositories under a directory (recursive, bounded)."""
+    raw = request.GET.get("path", "~")
+    base = expand_path(raw) if raw.startswith("~") else raw
+    repos, error = find_repos(base)
+    if repos is None:
+        return JsonResponse({"error": error}, status=400)
+
+    already = set(
+        Folder.objects.values_list("path", flat=True)
+    )
+    projects = []
+    for repo_path in repos:
+        name = repo_path.rstrip("/").split("/")[-1]
+        projects.append(
+            {
+                "path": repo_path,
+                "name": name,
+                "registered": repo_path in already,
+            }
+        )
+    return JsonResponse({"base": base, "projects": projects, "error": error})

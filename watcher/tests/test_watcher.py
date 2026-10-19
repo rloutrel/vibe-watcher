@@ -1797,3 +1797,70 @@ class NotARepoMessageTests(TestCase, RepoFixture):
         self.assertEqual(payload["error"], "not a git repository")
         self.assertEqual(payload["no_remote_error"], "")
         self.assertEqual(payload["branches"], [])
+
+
+class FindProjectsTests(TestCase, RepoFixture):
+    def setUp(self):
+        import os
+        import subprocess
+        import tempfile
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("mika", password="pw")
+        self.client.login(username="mika", password="pw")
+        self.base = tempfile.mkdtemp()
+        for name in ("repo-a", "nested/repo-b", "not-a-repo"):
+            full = os.path.join(self.base, name)
+            os.makedirs(full)
+            if "repo" in name and "not" not in name:
+                subprocess.run(
+                    ["git", "init", "-q", full], check=True,
+                    capture_output=True,
+                )
+        os.makedirs(os.path.join(self.base, "skip-me", "node_modules", "deep"))
+
+    def test_find_repos_finds_nested_repos(self):
+        from watcher.git import find_repos
+        import os
+
+        repos, error = find_repos(self.base)
+        self.assertEqual(error, "")
+        found = {os.path.relpath(r, self.base) for r in repos}
+        self.assertEqual(found, {"repo-a", "nested/repo-b"})
+
+    def test_find_repos_bad_path(self):
+        from watcher.git import find_repos
+
+        repos, error = find_repos("/definitely/not/here")
+        self.assertIsNone(repos)
+        self.assertIn("not a directory", error)
+
+    def test_find_projects_endpoint(self):
+        response = self.client.get(
+            reverse("watcher:folder-find"), {"path": self.base}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        names = {p["name"] for p in data["projects"]}
+        self.assertEqual(names, {"repo-a", "repo-b"})
+        for project in data["projects"]:
+            self.assertFalse(project["registered"])
+
+    def test_find_projects_marks_registered(self):
+        import os
+
+        self.make_folder(name="a", path=os.path.join(self.base, "repo-a"))
+        response = self.client.get(
+            reverse("watcher:folder-find"), {"path": self.base}
+        )
+        data = response.json()
+        by_name = {p["name"]: p for p in data["projects"]}
+        self.assertTrue(by_name["repo-a"]["registered"])
+        self.assertFalse(by_name["repo-b"]["registered"])
+
+    def test_find_projects_requires_login(self):
+        from django.test import Client
+
+        response = Client().get(reverse("watcher:folder-find"))
+        self.assertEqual(response.status_code, 302)

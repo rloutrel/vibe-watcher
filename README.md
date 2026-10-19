@@ -37,7 +37,10 @@ Add folders in the UI (`/` → *Add folder*) or via `/admin/`.
 
 **Folder picker**: click **📂 Browse…** next to the path field to
 navigate the filesystem in a picker dialog (directories only; Up/Home
-navigation). Handy when you don't remember exact paths — and since
+navigation). The **🔍 Find projects** button scans recursively (depth 3,
+max 200 results, skipping `node_modules`/venvs/etc.) for git repositories
+under the current directory and lists them — already-registered ones are
+marked ✅; click one to select it. Handy when you don't remember exact paths — and since
 listing goes through the watcher process, it shows the paths *it* can
 actually see (container-mapped in compose deployments).
 
