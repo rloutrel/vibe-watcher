@@ -219,6 +219,17 @@ Workflow: remote push, watcher fetches, detects change, pulls (ff-only),
 runs the post-pull command, and the desktop notification confirms
 "Pulled and restarted."
 
+### Stopped docker stack? Start it from the notification
+
+When a change is detected on a folder that contains a compose file
+(`compose.yaml`/`yml`, `docker-compose.yaml`/`yml`), the watcher checks
+whether that project's stack is actually running (`docker compose ls`).
+If it is not, the desktop notification carries a **Start now** action
+button (notify-send `-A`); clicking it runs `docker compose up -d` in the
+folder. Closing the notification does nothing — the stopped state is
+recorded in the event feed either way. Folders without a compose file are
+not affected, and the check is skipped when `docker` is unavailable.
+
 
 ## Folder management
 

@@ -12,7 +12,7 @@ from django.db import close_old_connections
 from django.utils import timezone
 
 from .consts import HEARTBEAT_INTERVAL
-from .actions import apply_updates
+from .actions import apply_updates, docker_running, start_docker
 from .git import GitError, GitRepo
 from .models import Folder, NotifiedCommit, Snapshot, WatcherEvent, WatcherStatus
 from .notify import get_notification_backend
@@ -122,6 +122,14 @@ def scan_folder(folder, repo=None, backend=None):
                 follow_up = f"Auto-pull failed: {action_result['pull_error']}"
             else:
                 follow_up = "Run git pull to update your local copy."
+
+            # Docker stack down? Offer to start it from the notification.
+            actions = []
+            stack_up = docker_running(folder)
+            if stack_up is False:
+                follow_up += " Docker stack is not running."
+                actions = [("start-docker", "Start now")]
+
             summary = f"{folder.name} has updates"
             body = (
                 f"{state['commits_behind']} new commit(s) on {state['upstream']}. "
@@ -132,7 +140,27 @@ def scan_folder(folder, repo=None, backend=None):
                 body,
                 notification_key=notification_key,
                 category="email.arrived",
+                actions=actions,
             )
+            if stack_up is False and result.action == "start-docker":
+                ok, output = start_docker(folder)
+                record_event(
+                    "change" if ok else "error",
+                    f"{folder.name}: docker stack {'started' if ok else 'failed to start'}",
+                    folder=folder,
+                    detail={"output": output[-500:]},
+                )
+                logger.info(
+                    "docker stack started from notification",
+                    extra={"folder": folder.name, "ok": ok},
+                )
+            elif stack_up is False:
+                record_event(
+                    "change",
+                    f"{folder.name}: docker stack not running",
+                    folder=folder,
+                    detail={"offered_start": True},
+                )
             mark_notified(folder, head)
             record_event(
                 "notification",

@@ -86,11 +86,16 @@ class FakeBackend:
         self.notifications = []
         self.name = "fake"
 
-    def notify(self, summary, body, notification_key=None, category=None):
+    def notify(self, summary, body, notification_key=None, category=None,
+               actions=None):
         self.notifications.append((summary, body, notification_key, category))
+        self.actions = actions or []
         from watcher.notify import NotificationResult
 
-        return NotificationResult(self.name, delivered=True, notification_id=42)
+        return NotificationResult(
+            self.name, delivered=True, notification_id=42,
+            action=getattr(self, "action_to_return", None),
+        )
 
 
 class RunGitTests(TestCase):
@@ -1295,3 +1300,144 @@ class AutoPullTests(TestCase, RepoFixture):
         args, kwargs = subprocess_mod.run.call_args
         self.assertEqual(args[0][:3], ["sh", "-c", "docker compose up --build -d"])
         self.assertEqual(kwargs["cwd"], "/tmp/with-compose")
+
+
+class DockerStartOfferTests(TestCase, RepoFixture):
+    def setUp(self):
+        import tempfile
+        import os
+
+        self.tmpdir = tempfile.mkdtemp()
+        self.repo = os.path.join(self.tmpdir, "proj")
+        os.makedirs(self.repo)
+        with open(os.path.join(self.repo, "compose.yaml"), "w") as fh:
+            fh.write("services: {web: {image: nginx}}\n")
+
+    def make_folder(self, **kw):
+        kw.setdefault("path", self.repo)
+        kw.setdefault("name", "proj")
+        return super().make_folder(**kw)
+
+    @mock.patch("watcher.actions._run_docker")
+    def test_docker_running_states(self, docker_mock):
+        from watcher.actions import docker_running
+
+        def mkproc(rc, out):
+            proc = mock.Mock()
+            proc.returncode = rc
+            proc.stdout = out
+            proc.stderr = ""
+            return proc
+
+        docker_mock.return_value = mkproc(
+            0, '[{"Name":"proj","Status":"running(3)","ConfigFiles":"compose.yaml"}]'
+        )
+        folder = self.make_folder()
+        self.assertIs(docker_running(folder), True)
+
+        docker_mock.return_value = mkproc(
+            0, '[{"Name":"proj","Status":"exited(0)","ConfigFiles":"compose.yaml"}]'
+        )
+        self.assertIs(docker_running(folder), False)
+
+    @mock.patch("watcher.actions._run_docker")
+    def test_docker_running_without_compose_file(self, docker_mock):
+        import os
+        import shutil
+
+        from watcher.actions import docker_running
+
+        os.remove(os.path.join(self.repo, "compose.yaml"))
+        folder = self.make_folder()
+        self.assertIsNone(docker_running(folder))
+        docker_mock.assert_not_called()
+
+    @mock.patch("watcher.scanner.start_docker")
+    @mock.patch("watcher.scanner.docker_running", return_value=False)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_change_with_stopped_stack_offers_start(self, GitRepoMock, up_mock,
+                                                    start_mock):
+        GitRepoMock.return_value = FakeRepo(observe_result(behind=1, head="dd00"))
+        start_mock.return_value = (True, "started")
+        folder = self.make_folder()
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        self.assertEqual(backend.actions, [("start-docker", "Start now")])
+        self.assertIn("Docker stack is not running", backend.notifications[0][1])
+
+    @mock.patch("watcher.scanner.start_docker")
+    @mock.patch("watcher.scanner.docker_running", return_value=False)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_start_action_starts_the_stack(self, GitRepoMock, up_mock, start_mock):
+        GitRepoMock.return_value = FakeRepo(observe_result(behind=1, head="dd00"))
+        start_mock.return_value = (True, "Container started")
+        folder = self.make_folder()
+        backend = FakeBackend()
+        backend.action_to_return = "start-docker"
+        scanner.scan_folder(folder, backend=backend)
+        start_mock.assert_called_once()
+        event = WatcherEvent.objects.filter(
+            message__contains="docker stack started"
+        ).first()
+        self.assertIsNotNone(event)
+
+    @mock.patch("watcher.scanner.start_docker")
+    @mock.patch("watcher.scanner.docker_running", return_value=True)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_running_stack_no_offer(self, GitRepoMock, up_mock, start_mock):
+        GitRepoMock.return_value = FakeRepo(observe_result(behind=1, head="dd00"))
+        folder = self.make_folder()
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        self.assertEqual(backend.actions, [])
+        start_mock.assert_not_called()
+
+    @mock.patch("watcher.scanner.docker_running", return_value=None)
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_no_compose_no_offer(self, GitRepoMock, up_mock):
+        GitRepoMock.return_value = FakeRepo(observe_result(behind=1, head="dd00"))
+        folder = self.make_folder()
+        backend = FakeBackend()
+        scanner.scan_folder(folder, backend=backend)
+        self.assertEqual(backend.actions, [])
+
+    @mock.patch("watcher.actions._run_docker")
+    def test_start_docker_invocation(self, docker_mock):
+        from watcher.actions import start_docker
+
+        proc = mock.Mock(returncode=0, stdout="started", stderr="")
+        docker_mock.return_value = proc
+        folder = self.make_folder()
+        ok, out = start_docker(folder)
+        self.assertTrue(ok)
+        args, kwargs = docker_mock.call_args
+        self.assertEqual(args[0][:3], ["compose", "up", "-d"])
+        self.assertEqual(kwargs["cwd"], self.repo)
+
+    @mock.patch.object(DbusNotificationBackend, "_run_notify_send")
+    def test_notify_with_actions_argv(self, send_mock):
+        send_mock.return_value = mock.Mock(
+            returncode=0, stdout="77\nstart-docker\n", stderr=""
+        )
+        backend = DbusNotificationBackend()
+        result = backend.notify(
+            "s", "b", notification_key="dk1",
+            actions=[("start-docker", "Start now")],
+        )
+        argv = send_mock.call_args[0][0]
+        self.assertIn("-A", argv)
+        self.assertEqual(argv[argv.index("-A") + 1], "start-docker=Start now")
+        self.assertTrue(result.delivered)
+        self.assertEqual(result.action, "start-docker")
+
+    @mock.patch.object(DbusNotificationBackend, "_run_notify_send")
+    def test_notify_action_closed_is_none(self, send_mock):
+        send_mock.return_value = mock.Mock(
+            returncode=0, stdout="78\nclosed\n", stderr=""
+        )
+        backend = DbusNotificationBackend()
+        result = backend.notify(
+            "s", "b", notification_key="dk2",
+            actions=[("start-docker", "Start now")],
+        )
+        self.assertIsNone(result.action)

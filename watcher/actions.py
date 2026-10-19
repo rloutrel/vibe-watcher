@@ -89,3 +89,72 @@ def apply_updates(folder, repo, state):
             },
         )
     return result
+
+
+def docker_running(folder):
+    """Check whether the folder's docker stack is up.
+
+    A folder "has docker" when it contains a compose file; the stack is
+    considered running when at least one of its containers is up. All
+    subprocess interaction goes through _run_docker (mockable seam).
+    """
+    import os
+
+    compose_file = find_compose_file(folder.path)
+    if not compose_file:
+        return None  # no docker project here
+    proc = _run_docker(["compose", "ls", "--format", "json"], cwd=folder.path)
+    if proc is None or proc.returncode != 0:
+        return None
+    import json
+
+    try:
+        projects = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    if isinstance(projects, dict):
+        projects = [projects]
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        config_files = str(project.get("ConfigFiles", ""))
+        if os.path.basename(compose_file) in config_files or config_files == "":
+            status = str(project.get("Status", ""))
+            if "running" in status.lower():
+                return True
+    return False
+
+
+def find_compose_file(path):
+    import os
+
+    candidates = [
+        "compose.yaml", "compose.yml",
+        "docker-compose.yaml", "docker-compose.yml",
+    ]
+    for candidate in candidates:
+        full = os.path.join(path, candidate)
+        if os.path.isfile(full):
+            return full
+    return None
+
+
+def _run_docker(args, cwd):
+    """Seam for tests: actually invokes docker when unmocked."""
+    try:
+        return subprocess.run(
+            ["docker", *args], cwd=cwd, capture_output=True, text=True,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+
+def start_docker(folder):
+    """Start the folder's docker stack (docker compose up -d)."""
+    proc = _run_docker(["compose", "up", "-d"], cwd=folder.path)
+    if proc is None:
+        return False, "docker not available"
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout or "compose up failed")[-500:]
+    return True, (proc.stdout or "").strip()[-500:]

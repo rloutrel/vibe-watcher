@@ -23,17 +23,20 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationResult:
-    def __init__(self, backend, delivered, notification_id=None, reason=""):
+    def __init__(self, backend, delivered, notification_id=None, reason="",
+                 action=None):
         self.backend = backend
         self.delivered = delivered
         self.notification_id = notification_id
         self.reason = reason
+        self.action = action
 
 
 class BaseNotificationBackend:
     name = "base"
 
-    def notify(self, summary, body, notification_key=None, category=None):
+    def notify(self, summary, body, notification_key=None, category=None,
+               actions=None):
         raise NotImplementedError
 
 
@@ -42,7 +45,8 @@ class NullNotificationBackend(BaseNotificationBackend):
 
     name = "none"
 
-    def notify(self, summary, body, notification_key=None, category=None):
+    def notify(self, summary, body, notification_key=None, category=None,
+               actions=None):
         logger.info(
             "notification suppressed",
             extra={"backend": self.name, "summary": summary, "body": body},
@@ -59,7 +63,14 @@ class DbusNotificationBackend(BaseNotificationBackend):
         """Seam for tests: actually invokes notify-send when unmocked."""
         return subprocess.run(argv, capture_output=True, text=True, timeout=30)
 
-    def notify(self, summary, body, notification_key=None, category=None):
+    def notify(self, summary, body, notification_key=None, category=None,
+               actions=None):
+        """Send a notification; ``actions`` is a list of (key, label) pairs.
+
+        When the desktop environment supports notify-send -A, the process
+        blocks until the notification is closed or an action is clicked and
+        the clicked action key is returned in NotificationResult.action.
+        """
         app_name = getattr(settings, "WATCHER_NOTIFY_APP_NAME", "vibe-watcher")
         argv = ["notify-send", "-a", app_name, "--expire-time", "10000", "--print-id"]
 
@@ -72,6 +83,9 @@ class DbusNotificationBackend(BaseNotificationBackend):
         extra_args = getattr(settings, "WATCHER_NOTIFY_SEND_ARGS", "")
         if extra_args:
             argv += extra_args.split()
+
+        for action_key, action_label in (actions or []):
+            argv += ["-A", f"{action_key}={action_label}"]
 
         argv += [summary, body]
 
@@ -111,15 +125,29 @@ class DbusNotificationBackend(BaseNotificationBackend):
         if notification_key is not None and notification_id is not None:
             self._remember(app_name, notification_key, notification_id)
 
-        return NotificationResult(self.name, delivered=True, notification_id=notification_id)
+        return NotificationResult(
+            self.name,
+            delivered=True,
+            notification_id=notification_id,
+            action=self._parse_action(proc.stdout),
+        )
 
     @staticmethod
     def _parse_notification_id(stdout, fallback=None):
-        for line in reversed(stdout.splitlines()):
+        for line in stdout.splitlines():
             line = line.strip()
             if line.isdigit():
                 return int(line)
         return fallback
+
+    @staticmethod
+    def _parse_action(stdout):
+        # notify-send -A prints the id on the first line and the chosen
+        # action key (or "closed") on the last line.
+        lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+        if len(lines) >= 2 and lines[-1].lower() != "closed":
+            return lines[-1]
+        return None
 
     @staticmethod
     def _lookup_reuse_id(app_name, notification_key):
