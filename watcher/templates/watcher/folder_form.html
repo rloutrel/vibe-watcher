@@ -1,14 +1,15 @@
 {% extends "watcher/base.html" %}
+{% load i18n %}
 {% block content %}
 <div class="page-head">
-  <h2>{% if folder %}Edit {{ folder.name }}{% else %}Add folder{% endif %}</h2>
+  <h2>{% if folder %}{{ folder.name }}{% else %}{% translate "Add folder" %}{% endif %}</h2>
 </div>
 
 <form method="post" id="folder-form">
   {% csrf_token %}
 
   <div class="card">
-    <label class="field-label" for="id_project">Project</label>
+    <label class="field-label" for="id_project">{% translate "Project" %}</label>
     <div class="row">
       <select id="id_project" class="grow"></select>
       <button type="button" class="btn icon" id="refresh-projects" title="Refresh project list">⟳</button>
@@ -19,35 +20,35 @@
   <div class="card">
     <div class="grid">
       <div class="field">
-        <label class="field-label" for="id_name">Name</label>
+        <label class="field-label" for="id_name">{% translate "Name" %}</label>
         {{ form.name }}
       </div>
       <div class="field">
-        <label class="field-label" for="id_branch">Branch</label>
+        <label class="field-label" for="id_branch">{% translate "Branch" %}</label>
         {{ form.branch }}
       </div>
       <div class="field">
-        <label class="field-label" for="id_poll_interval">Poll interval (s)</label>
+        <label class="field-label" for="id_poll_interval">{% translate "Poll interval (s)" %}</label>
         {{ form.poll_interval }}
       </div>
       <div class="field">
-        <label class="field-label" for="id_post_pull_command">After pull</label>
+        <label class="field-label" for="id_post_pull_command">{% translate "After pull" %}</label>
         {{ form.post_pull_command }}
       </div>
       <div class="field">
-        <label class="field-label" for="id_git_token">Git token (private repos)</label>
+        <label class="field-label" for="id_git_token">{% translate "Git token (private repos)" %}</label>
         {{ form.git_token }}
       </div>
     </div>
     {{ form.path }}
     <div class="switches">
       <label class="switch-line">
-        <span>Auto-pull</span>
+        <span>{% translate "Auto-pull" %}</span>
         {{ form.auto_pull }}
         <span class="switch"><span class="knob"></span></span>
       </label>
       <label class="switch-line">
-        <span>Enabled</span>
+        <span>{% translate "Enabled" %}</span>
         {{ form.enabled }}
         <span class="switch"><span class="knob"></span></span>
       </label>
@@ -57,8 +58,8 @@
   <p id="branch-error" class="hint error" style="display: none;"></p>
 
   <div class="actions">
-    <button class="btn primary" type="submit">Save</button>
-    <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
+    <button class="btn primary" type="submit">{% translate "Save" %}</button>
+    <a class="btn" href="{% url 'watcher:index' %}">{% translate "Cancel" %}</a>
   </div>
 </form>
 
@@ -164,7 +165,7 @@
   function loadProjects() {
     projectSelect.innerHTML = "";
     var loading = document.createElement("option");
-    loading.textContent = "Loading projects…";
+    loading.textContent = "{% translate "Loading projects…" %}";
     projectSelect.appendChild(loading);
     statusEl.textContent = "";
     fetch(findUrl)
@@ -173,7 +174,7 @@
         projectSelect.innerHTML = "";
         var empty = document.createElement("option");
         empty.value = "";
-        empty.textContent = "— choose a project —";
+        empty.textContent = "{% translate "— choose a project —" %}";
         projectSelect.appendChild(empty);
         (data.projects || []).forEach(function (p) {
           var opt = document.createElement("option");
@@ -184,17 +185,17 @@
         });
         if (!data.projects || !data.projects.length) {
           var none = document.createElement("option");
-          none.textContent = "No projects found";
+          none.textContent = "{% translate "No projects found" %}";
           none.disabled = true;
           projectSelect.appendChild(none);
         }
-        statusEl.textContent = "Scanning: " + (data.base || "?") +
+        statusEl.textContent = "{% translate "Scanning" %}: " + (data.base || "?") +
           ((data.error === "truncated") ? " (truncated)" : "");
       })
       .catch(function () {
         projectSelect.innerHTML = "";
         var err = document.createElement("option");
-        err.textContent = "Failed to load projects";
+        err.textContent = "{% translate "Failed to load projects" %}";
         projectSelect.appendChild(err);
       });
   }

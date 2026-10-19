@@ -1,0 +1,178 @@
+#
+msgid ""
+msgstr ""
+"Language: fr\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Config"
+msgstr "Configuration"
+
+msgid "Log out"
+msgstr "Déconnexion"
+
+msgid "Log in"
+msgstr "Connexion"
+
+msgid "Watcher status"
+msgstr "État du watcher"
+
+msgid "Running"
+msgstr "En cours"
+
+msgid "watcher stopped or hung?"
+msgstr "watcher arrêté ou bloqué ?"
+
+msgid "Never run"
+msgstr "Jamais démarré"
+
+msgid "last heartbeat"
+msgstr "dernier battement de cœur"
+
+msgid "ago"
+msgstr "il y a"
+
+msgid "iteration"
+msgstr "itération"
+
+msgid "Last error"
+msgstr "Dernière erreur"
+
+msgid "Folders"
+msgstr "Dossiers"
+
+msgid "Add folder"
+msgstr "Ajouter un dossier"
+
+msgid "Name"
+msgstr "Nom"
+
+msgid "Path"
+msgstr "Chemin"
+
+msgid "Branch"
+msgstr "Branche"
+
+msgid "Interval"
+msgstr "Intervalle"
+
+msgid "Latest state"
+msgstr "Dernier état"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "disabled"
+msgstr "désactivé"
+
+msgid "(checked-out)"
+msgstr "(extraite)"
+
+msgid "not scanned yet"
+msgstr "pas encore scanné"
+
+msgid "Edit"
+msgstr "Modifier"
+
+msgid "Delete"
+msgstr "Supprimer"
+
+msgid "Check now"
+msgstr "Vérifier"
+
+msgid "No folders yet."
+msgstr "Aucun dossier pour l'instant."
+
+msgid "Backup"
+msgstr "Sauvegarde"
+
+msgid ""
+"Save the folder configuration to restore it after a reinstall or database "
+"loss."
+msgstr ""
+"Sauvegardez la configuration des dossiers pour la restaurer après une "
+"réinstallation ou une perte de base de données."
+
+msgid "⬇ Export config"
+msgstr "⬇ Exporter la configuration"
+
+msgid "⬆ Import config"
+msgstr "⬆ Importer la configuration"
+
+msgid "Recent events"
+msgstr "Événements récents"
+
+msgid "When"
+msgstr "Quand"
+
+msgid "Kind"
+msgstr "Type"
+
+msgid "Folder"
+msgstr "Dossier"
+
+msgid "Message"
+msgstr "Message"
+
+msgid "No events yet. The watcher writes events here as it polls."
+msgstr ""
+"Aucun événement pour l'instant. Le watcher inscrira ici ses événements."
+
+msgid "Delete this folder from the watcher?"
+msgstr "Supprimer ce dossier du watcher ?"
+
+msgid "Project"
+msgstr "Projet"
+
+msgid "Poll interval (s)"
+msgstr "Intervalle de vérification (s)"
+
+msgid "After pull"
+msgstr "Après le pull"
+
+msgid "Git token (private repos)"
+msgstr "Token git (dépôts privés)"
+
+msgid "Auto-pull"
+msgstr "Auto-pull"
+
+msgid "Enabled"
+msgstr "Activé"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgid "Loading projects…"
+msgstr "Chargement des projets…"
+
+msgid "— choose a project —"
+msgstr "— choisir un projet —"
+
+msgid "No projects found"
+msgstr "Aucun projet trouvé"
+
+msgid "Failed to load projects"
+msgstr "Échec du chargement des projets"
+
+msgid "Scanning"
+msgstr "Analyse"
+
+msgid "Configuration"
+msgstr "Configuration"
+
+msgid "Git token (HTTPS)"
+msgstr "Token git (HTTPS)"
+
+msgid "Save token"
+msgstr "Enregistrer le token"
+
+msgid "Remove token"
+msgstr "Supprimer le token"
+
+msgid "Token"
+msgstr "Token"
+
+msgid "Your username and password didn't match. Please try again."
+msgstr "Identifiants incorrects. Veuillez réessayer."

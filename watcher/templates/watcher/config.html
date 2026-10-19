@@ -1,9 +1,10 @@
 {% extends "watcher/base.html" %}
+{% load i18n %}
 {% block content %}
-<h2>Configuration</h2>
+<h2>{% translate "Configuration" %}</h2>
 
 <section>
-  <h3>Git token (HTTPS)</h3>
+  <h3>{% translate "Git token (HTTPS)" %}</h3>
   <p class="muted">
     Used to fetch over HTTPS with authentication when your repos are cloned over SSH.
     Your SSH remotes are left untouched — the watcher fetches
@@ -14,7 +15,7 @@
     {% csrf_token %}
     <table>
       <tr>
-        <th><label for="id_token">Token</label></th>
+        <th><label for="id_token">{% translate "Token" %}</label></th>
         <td>
           <input type="password" name="token" id="id_token" autocomplete="off"
                  placeholder="{{ token_hint }}" style="width: 24rem;">
@@ -22,8 +23,8 @@
         </td>
       </tr>
     </table>
-    <button class="btn" type="submit">Save token</button>
-    <a class="btn" href="{% url 'watcher:config-token-delete' %}">Remove token</a>
+    <button class="btn" type="submit">{% translate "Save token" %}</button>
+    <a class="btn" href="{% url 'watcher:config-token-delete' %}">{% translate "Remove token" %}</a>
   </form>
 </section>
 {% endblock %}

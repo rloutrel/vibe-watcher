@@ -2200,3 +2200,43 @@ class SafeDirectoryTests(TestCase, RepoFixture):
         ]
         self.assertEqual(len(checkout_calls), 1)
         self.assertIn("dev", state["branch"])
+
+
+class ThemeI18nTests(TestCase, RepoFixture):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("poly", password="pw")
+        self.client.login(username="poly", password="pw")
+
+    def test_theme_toggle_and_lang_picker_present(self):
+        response = self.client.get(reverse("watcher:index"))
+        html = response.content.decode()
+        self.assertIn('id="theme-toggle"', html)
+        self.assertIn("vibe-theme", html)  # localStorage persistence script
+        self.assertIn('data-theme="dark"', html)  # dark CSS variables
+        self.assertIn("🇫🇷", html)
+        self.assertIn("🇩🇪", html)
+        self.assertIn("🇬🇧", html)
+
+    def test_language_switch_to_french(self):
+        response = self.client.post(
+            "/i18n/setlang/", {"language": "fr", "next": "/"}
+        )
+        self.assertEqual(response.status_code, 302)
+        html = self.client.get(reverse("watcher:index")).content.decode()
+        self.assertIn("Dossiers", html)
+        self.assertIn("Déconnexion", html)
+
+    def test_language_switch_to_german(self):
+        self.client.post("/i18n/setlang/", {"language": "de", "next": "/"})
+        html = self.client.get(reverse("watcher:index")).content.decode()
+        self.assertIn("Ordner", html)
+        self.assertIn("Abmelden", html)
+
+    def test_french_form_translations(self):
+        self.client.post("/i18n/setlang/", {"language": "fr", "next": "/"})
+        html = self.client.get(reverse("watcher:folder-create")).content.decode()
+        self.assertIn("Projet", html)
+        self.assertIn("Intervalle de vérification", html)
+        self.assertIn("Enregistrer", html)

@@ -369,6 +369,13 @@ The watcher logs structured JSON to stdout, which journald captures:
 user mode). The web UI's *Recent events* feed reads from the database
 (`WatcherEvent`), not from log files.
 
+## Dark mode & languages
+
+The header has a **🌙/☀️ theme toggle** (persisted in localStorage, CSS
+variables throughout) and a **flag picker** — 🇫🇷 / 🇩🇪 / 🇬🇧 — switching
+the interface language (FR/DE/EN, stored in the session). Translations
+live in `locale/<lang>/LC_MESSAGES/django.po`.
+
 ## Tests
 
 ```bash
