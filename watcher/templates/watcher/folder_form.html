@@ -16,7 +16,6 @@
   var form = document.getElementById("folder-form");
   var pathInput = form.querySelector("#id_path");
   var nameInput = form.querySelector("#id_name");
-  var urlInput = form.querySelector("#id_url");
   var branchSelect = form.querySelector("#id_branch");
   var errorEl = document.getElementById("branch-error");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
@@ -75,8 +74,8 @@
         if (!data) return;
         if (data.path) pathInput.value = data.path;
         if (data.name && !nameInput.value.trim()) nameInput.value = data.name;
-        if (data.url && !urlInput.value.trim()) urlInput.value = data.url;
         if (data.branches) setBranchOptions(data);
+        if (data.path) refreshBranches();
       })
       .catch(function () {});
   }
@@ -132,6 +131,7 @@
     if (projectSelect.value) {
       pathInput.value = projectSelect.value;
       autodetect();
+      refreshBranches();
     }
   });
   refreshBtn.addEventListener("click", loadProjects);

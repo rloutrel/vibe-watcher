@@ -48,7 +48,8 @@ actually see (container-mapped in compose deployments).
 
 **Quick add**: type just the path (with `~` supported — it's expanded
 server-side against the watcher user's home) and leave the other fields
-empty. When the path field loses focus, the form autodetects the repo:
+empty. The URL is autodetected from the git remote; there is no URL
+field. When the path field loses focus, the form autodetects the repo:
 name (from the directory), checked-out branch, remote URL, and available
 branches. If the path isn't a git repo, you can still fill the fields
 manually — autodetection reports errors but never blocks saving. The name
@@ -296,14 +297,14 @@ The **Config** link in the header opens a page to store a **git token**
 setup: repos cloned over **SSH** while you want the watcher to fetch over
 **HTTPS with a token** (e.g. inside containers without your SSH keys).
 
-**Per-project token**: each folder can define its own token in the form
-(password field; leave empty to use the global one, empty on edit keeps
-the existing value). It overrides the global token for that project —
-useful to scope tokens per repository. **Read-only**: the watcher only
-ever fetches, so a GitHub fine-grained PAT with just
-*Contents: Read-only* works everywhere (create it at
-github.com/settings/personal-access-tokens). Tokens are never included
-in config exports.
+**Per-project token** (optional): each folder can define its own token in
+the form (password field; leave empty to use the global one, empty on
+edit keeps the existing value). **Open-source/public repos need no token
+at all**: the watcher fetches over anonymous HTTPS, so only private
+repositories require one. **Read-only**: the watcher only ever fetches,
+so a GitHub fine-grained PAT with just *Contents: Read-only* works
+(create it at github.com/settings/personal-access-tokens). Tokens are
+never included in config exports.
 
 No second remote is needed and your repo config is untouched: the watcher
 converts the SSH remote on the fly and fetches

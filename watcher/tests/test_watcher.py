@@ -1682,7 +1682,7 @@ class TokenConfigTests(TestCase, RepoFixture):
 
         with mock.patch("watcher.git.run_git", side_effect=side_effect):
             repo = GitRepo("/tmp/fake")
-            url = repo._https_url_with_token()
+            url = repo.https_remote_url()
             self.assertEqual(url, "https://tok123@github.com/me/my-repo.git")
 
     def test_https_url_passthrough_https(self):
@@ -1698,17 +1698,19 @@ class TokenConfigTests(TestCase, RepoFixture):
 
         with mock.patch("watcher.git.run_git", side_effect=side_effect):
             repo = GitRepo("/tmp/fake")
-            url = repo._https_url_with_token()
+            url = repo.https_remote_url()
             self.assertEqual(url, "https://tok123@github.com/me/my-repo.git")
 
-    def test_no_token_no_conversion(self):
+    def test_no_token_anonymous_https(self):
         import os
 
         os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
         with mock.patch("watcher.git.run_git") as run_git_mock:
             run_git_mock.return_value = git_out("git@github.com:me/my-repo.git")
             repo = GitRepo("/tmp/fake")
-            self.assertIsNone(repo._https_url_with_token())
+            self.assertEqual(
+                repo.https_remote_url(), "https://github.com/me/my-repo.git"
+            )
 
     @mock.patch("watcher.git.run_git")
     def test_fetch_with_token_uses_https_url(self, run_git_mock):
@@ -1926,7 +1928,7 @@ class PerProjectTokenTests(TestCase, RepoFixture):
             "git@github.com:me/my-repo.git"
         )
         repo = GitRepo("/tmp/fake", token="projecttok")
-        url = repo._https_url_with_token()
+        url = repo.https_remote_url()
         self.assertIn("projecttok@", url)
         self.assertNotIn("globaltok", url)
 
@@ -1939,7 +1941,7 @@ class PerProjectTokenTests(TestCase, RepoFixture):
             "git@github.com:me/my-repo.git"
         )
         repo = GitRepo("/tmp/fake")
-        url = repo._https_url_with_token()
+        url = repo.https_remote_url()
         self.assertIn("globaltok@", url)
 
     @mock.patch("watcher.scanner.GitRepo")

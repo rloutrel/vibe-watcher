@@ -437,37 +437,39 @@ class GitRepo:
         }
 
 
-    def _https_url_with_token(self):
-        """Build an authenticated HTTPS URL for the origin remote.
+    def https_remote_url(self):
+        """HTTPS URL for the origin remote, authenticated when possible.
 
-        Repos are often cloned over SSH; the watcher can instead fetch over
-        HTTPS with a token, without adding a second remote or touching the
-        repo's config. Returns None when no token is configured or the
-        remote isn't convertible (non-GitHub hosts keep their scheme).
+        Repos are often cloned over SSH; the watcher fetches over HTTPS
+        instead — no second remote, no repo config change. A token (folder
+        token or VIBE_WATCHER_GIT_TOKEN) is injected when configured;
+        public/open-source repos fetch fine anonymously. Returns None when
+        the remote is not convertible to HTTPS.
         """
         url = self.remote_url()
-        token = self.token or os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
-        if not token or not url:
+        if not url:
             return None
+        token = self.token or os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
+        if url.startswith("https://"):
+            return url.replace("https://", f"https://{token}@") if token else url
         m = re.match(r"(?:ssh://)?(?:git@)([^:/]+)[:/](.+?)(?:\.git)?$", url)
         if not m:
-            # Already HTTPS: inject the token.
-            if url.startswith("https://"):
-                return url.replace("https://", f"https://{token}@")
             return None
         host, path = m.group(1), m.group(2)
-        return f"https://{token}@{host}/{path}.git"
+        auth = f"{token}@" if token else ""
+        return f"https://{auth}{host}/{path}.git"
 
     def fetch_with_token(self):
-        """Fetch using the token-authenticated HTTPS URL (no config change).
+        """Fetch over the HTTPS remote URL (token or anonymous).
 
-        Returns True when a token fetch was performed; False when the
-        caller should fall back to the plain fetch.
+        Returns True when an HTTPS fetch was attempted; False when the
+        caller should fall back to the plain fetch (no HTTPS-convertible
+        remote).
         """
-        https_url = self._https_url_with_token()
+        https_url = self.https_remote_url()
         if not https_url:
             return False
-        res = run_git(
+        run_git(
             self.path,
             "fetch",
             https_url,
@@ -475,11 +477,11 @@ class GitRepo:
             "--quiet",
             check=False,
         )
-        return res.ok or True
+        return True
 
     def pull_ff_only_with_token(self, branch=None):
-        """Fast-forward pull fetching over the token HTTPS URL first."""
-        https_url = self._https_url_with_token()
+        """Fast-forward pull fetching over the HTTPS URL first."""
+        https_url = self.https_remote_url()
         if https_url:
             run_git(
                 self.path,
