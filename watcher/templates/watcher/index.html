@@ -42,7 +42,7 @@
         <td>{{ folder.poll_interval }}s</td>
         <td>
           {% if snapshot %}
-            <span class="badge {% if snapshot.state == 'error' %}stale{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}">{{ snapshot.state }}</span>
+            <span class="badge {% if snapshot.state == 'error' %}stale{% elif snapshot.state == 'empty' %}never-run{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}">{{ snapshot.state }}</span>
             {% if snapshot.upstream %}<span class="muted">{{ snapshot.commits_behind }} behind / {{ snapshot.commits_ahead }} ahead</span>{% endif %}
           {% else %}
             <span class="muted">not scanned yet</span>

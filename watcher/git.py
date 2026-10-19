@@ -55,8 +55,10 @@ def run_git(repo_path, *args, check=True):
         raise GitError("git executable not found on PATH") from exc
 
     if check and proc.returncode != 0:
+        detail = (proc.stderr or "").strip().splitlines()
+        hint = f" ({detail[0]})" if detail else ""
         raise GitError(
-            f"git {' '.join(args)} failed with code {proc.returncode}",
+            f"git {' '.join(args)} failed with code {proc.returncode}{hint}",
             stderr=proc.stderr,
             returncode=proc.returncode,
         )
@@ -169,12 +171,29 @@ class GitRepo:
             )
         return choices
 
-    def rev_parse_head(self):
-        return run_git(self.path, "rev-parse", "HEAD").stdout.strip()
+    def rev_parse_head(self, check=True):
+        return run_git(self.path, "rev-parse", "HEAD", check=check).stdout.strip()
+
+    def is_repo(self):
+        """True when the path holds a git repository at all."""
+        return run_git(self.path, "rev-parse", "--git-dir", check=False).ok
+
+    def has_commits(self):
+        """False for a freshly init'd repo whose HEAD is unborn.
+
+        git rev-parse HEAD on an unborn HEAD exits 128 and prints "HEAD"
+        on stdout, so the return code is the reliable signal. Only call
+        on paths that are repos (is_repo first), or a plain directory
+        would look like an empty repo.
+        """
+        res = run_git(self.path, "rev-parse", "HEAD", check=False)
+        return res.ok and bool(res.stdout.strip()) and res.stdout.strip() != "HEAD"
 
     def current_branch(self):
-        res = run_git(self.path, "rev-parse", "--abbrev-ref", "HEAD")
-        return res.stdout.strip()
+        # check=False: HEAD is unborn in a repo without commits; git then
+        # returns "HEAD" on stdout with rc 128, which is still informative.
+        res = run_git(self.path, "rev-parse", "--abbrev-ref", "HEAD", check=False)
+        return (res.stdout.strip() if res.ok else "") or "HEAD"
 
     def remote_url(self):
         res = run_git(self.path, "remote", "get-url", "origin", check=False)
@@ -259,6 +278,21 @@ class GitRepo:
         Returns a dict with head/branch/upstream/state/commits_* fields.
         Raises GitError if the repo cannot be inspected at all.
         """
+        if not self.is_repo():
+            raise GitError("not a git repository")
+        if not self.has_commits():
+            # Repo without any commit (fresh git init): nothing to watch yet.
+            return {
+                "head": "",
+                "branch": branch or self.current_branch(),
+                "url": self.remote_url(),
+                "upstream": "",
+                "state": "empty",
+                "commits_ahead": 0,
+                "commits_behind": 0,
+                "upstream_changed": False,
+            }
+
         head = self.rev_parse_head()
         current = self.current_branch()
         url = self.remote_url()

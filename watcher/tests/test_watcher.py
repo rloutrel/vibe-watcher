@@ -1441,3 +1441,34 @@ class DockerStartOfferTests(TestCase, RepoFixture):
             actions=[("start-docker", "Start now")],
         )
         self.assertIsNone(result.action)
+
+
+class EmptyRepoTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_observe_empty_repo_returns_empty_state(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            check = kwargs.get("check", True)
+            if cmd == ("rev-parse", "HEAD"):
+                if check:
+                    raise GitError("rev-parse HEAD failed")
+                return GitCommandResult([], stdout="", stderr="", returncode=128)
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fresh")
+        state = repo.observe()
+        self.assertEqual(state["state"], "empty")
+        self.assertEqual(state["head"], "")
+        self.assertEqual(state["branch"], "main")
+        self.assertFalse(state["upstream_changed"])
+
+    def test_error_message_includes_git_hint(self):
+        with self.assertRaises(GitError) as ctx:
+            run_git("/tmp/definitely-not-a-repo", "rev-parse", "HEAD")
+        self.assertIn("code 128", str(ctx.exception))
+        self.assertIn("fatal", str(ctx.exception).lower())
