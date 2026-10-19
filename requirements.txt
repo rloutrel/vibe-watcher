@@ -1,1 +1,2 @@
 Django>=5.0,<7.0
+psycopg[binary]>=3.2
