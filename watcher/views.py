@@ -349,9 +349,9 @@ def config_token_delete(request):
 @require_GET
 def find_projects(request):
     """Find all git repositories under a directory (recursive, bounded)."""
-    raw = request.GET.get(
-        "path", getattr(settings, "WATCHER_PROJECTS_BASE", "~")
-    )
+    raw = request.GET.get("path") or os.environ.get(
+        "VIBE_WATCHER_PROJECTS_BASE"
+    ) or getattr(settings, "WATCHER_PROJECTS_BASE", "~")
     base = expand_path(raw) if raw.startswith("~") else raw
     repos, error = find_repos(base)
     if repos is None:

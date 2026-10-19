@@ -7,6 +7,7 @@
     {{ form.as_table }}
   </table>
   <p id="branch-error" class="muted" style="color: #dc2626; display: none;"></p>
+  <p id="find-status" class="muted"></p>
   <button class="btn" type="submit">Save</button>
   <a class="btn" href="{% url 'watcher:index' %}">Cancel</a>
 </form>
@@ -18,10 +19,19 @@
   var nameInput = form.querySelector("#id_name");
   var branchSelect = form.querySelector("#id_branch");
   var errorEl = document.getElementById("branch-error");
+  var statusEl = document.getElementById("find-status");
   var branchesUrl = "{% url 'watcher:branches-for-path' %}";
   var detectUrl = "{% url 'watcher:folder-detect' %}";
   var findUrl = "{% url 'watcher:folder-find' %}";
   var savedBranch = "{{ folder.branch|default:'' }}";
+  var initialPath = "{{ folder.path|default:'' }}";
+
+  // The path is chosen via the project dropdown only: hide the raw input.
+  if (pathInput) {
+    var pathRow = pathInput.closest("tr");
+    if (pathRow) pathRow.style.display = "none";
+    pathInput.required = false;
+  }
 
   function showError(message) {
     if (message) { errorEl.textContent = message; errorEl.style.display = "block"; }
@@ -75,7 +85,6 @@
         if (data.path) pathInput.value = data.path;
         if (data.name && !nameInput.value.trim()) nameInput.value = data.name;
         if (data.branches) setBranchOptions(data);
-        if (data.path) refreshBranches();
       })
       .catch(function () {});
   }
@@ -83,20 +92,26 @@
   // ---- project dropdown ----
   var projectSelect = document.createElement("select");
   projectSelect.id = "id_project";
-  projectSelect.style.marginLeft = ".4rem";
+  projectSelect.style.display = "none";
   var refreshBtn = document.createElement("button");
   refreshBtn.type = "button";
   refreshBtn.className = "btn";
-  refreshBtn.textContent = "🔄";
-  refreshBtn.title = "Refresh project list";
-  pathInput.insertAdjacentElement("afterend", refreshBtn);
-  refreshBtn.insertAdjacentElement("afterend", projectSelect);
+  refreshBtn.textContent = "🔄 Refresh projects";
+  refreshBtn.style.display = "none";
+  var slot = pathRow || null;
+  if (slot) {
+    slot.insertAdjacentElement("afterend", refreshBtn);
+    refreshBtn.insertAdjacentElement("afterend", projectSelect);
+  }
 
   function loadProjects() {
+    projectSelect.style.display = "inline-block";
+    refreshBtn.style.display = "inline-block";
     projectSelect.innerHTML = "";
     var loading = document.createElement("option");
     loading.textContent = "Loading projects…";
     projectSelect.appendChild(loading);
+    statusEl.textContent = "";
     fetch(findUrl)
       .then(function (r) { return r.ok ? r.json() : { error: "search failed" }; })
       .then(function (data) {
@@ -114,10 +129,12 @@
         });
         if (!data.projects || !data.projects.length) {
           var none = document.createElement("option");
-          none.textContent = data.error ? data.error : "No projects found";
+          none.textContent = "No projects found";
           none.disabled = true;
           projectSelect.appendChild(none);
         }
+        statusEl.textContent = "Scanning: " + (data.base || "?") +
+          ((data.error === "truncated") ? " (truncated)" : "");
       })
       .catch(function () {
         projectSelect.innerHTML = "";
@@ -136,10 +153,8 @@
   });
   refreshBtn.addEventListener("click", loadProjects);
 
-  pathInput.addEventListener("blur", autodetect);
-  pathInput.addEventListener("change", refreshBranches);
   loadProjects();
-  {% if not folder %}autodetect();{% else %}refreshBranches();{% endif %}
+  if (initialPath) { autodetect(); refreshBranches(); }
 })();
 </script>
 {% endblock %}
