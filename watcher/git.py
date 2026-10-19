@@ -204,45 +204,25 @@ class GitRepo:
         return res.ok and len(res.lines()) > 0
 
     def branch_choices(self):
-        """Deduplicated branch list for the picker.
+        """Remote branches for the picker (remote-only view).
 
-        Local and remote-tracking branches are queried separately and matched
-        by name, so a local branch containing a slash (e.g.
-        ``vibe/capability-spec``) is correctly classified as local. When both
-        ``main`` and ``origin/main`` exist, only ``main`` is offered: the
-        watcher resolves the branch's upstream automatically. A branch that
-        only exists on the remote keeps its ``origin/...`` form so it can be
-        watched even without a local checkout. Entries are dicts:
-
-        - ``name``: the value to store (local branch name, or origin/... for
-          remote-only branches)
-        - ``remote``: True if a matching remote-tracking ref exists
-        - ``current``: True for the checked-out branch
+        Only remote-tracking branches are listed, as short names (main,
+        dev) — the watcher's purpose is tracking remote changes, so the
+        choice space is what exists on the remote. ``current`` marks the
+        locally checked-out branch when it matches. ``has_local`` tells
+        whether a local checkout exists (used to decide auto-checkout).
         """
-        locals_ = self.list_local_branches()
         # The symbolic origin/HEAD alias renders as bare "origin" with
         # --format=%(refname:short); it is not a real branch, drop it.
         remotes = [r for r in self.list_remote_branches() if "/" in r]
-        remote_names = {r.split("/", 1)[1] for r in remotes}
-        current = None
+        locals_ = set(self.list_local_branches())
         try:
             current = self.current_branch()
         except GitError:
-            pass
+            current = None
 
         seen = set()
         choices = []
-        for name in locals_:
-            if name in seen:
-                continue
-            seen.add(name)
-            choices.append(
-                {
-                    "name": name,
-                    "remote": name in remote_names,
-                    "current": name == current,
-                }
-            )
         for name in remotes:
             short = name.split("/", 1)[1]
             if short in seen:
@@ -250,12 +230,25 @@ class GitRepo:
             seen.add(short)
             choices.append(
                 {
-                    "name": name,
+                    "name": short,
                     "remote": True,
-                    "current": False,
+                    "current": short == current,
+                    "has_local": short in locals_,
                 }
             )
         return choices
+
+    def checkout_branch(self, branch):
+        """Create a local branch tracking origin/<branch> and check it out.
+
+        Used when the watched remote branch has no local checkout yet.
+        Requires a clean working tree; raises GitError otherwise.
+        """
+        if not self.status_is_clean():
+            raise GitError("working tree is dirty; commit or stash first")
+        return run_git(
+            self.path, "checkout", "-B", branch, "--track", f"origin/{branch}"
+        )
 
     def rev_parse_head(self, check=True):
         return run_git(self.path, "rev-parse", "HEAD", check=check).stdout.strip()
@@ -418,8 +411,26 @@ class GitRepo:
                 check=False,
             )
             if not local.ok:
-                # Not a local branch: a remote-tracking ref such as
-                # origin/main — watch its tip directly.
+                remote_ref = run_git(
+                    self.path,
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    f"refs/remotes/origin/{branch}",
+                    check=False,
+                )
+                if remote_ref.ok and getattr(
+                    settings, "WATCHER_AUTO_CHECKOUT", True
+                ):
+                    # Watched branch exists on the remote but has no local
+                    # checkout: create it (tracking origin/<branch>) and
+                    # check it out. Requires a clean tree; skipped silently
+                    # when impossible (dirty tree, detached head...).
+                    try:
+                        self.checkout_branch(branch)
+                    except GitError:
+                        pass
+                # Remote-tracking ref such as origin/main — watch its tip.
                 upstream = branch
             else:
                 # Local branch name: prefer its configured upstream; fall

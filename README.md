@@ -303,13 +303,17 @@ Each folder has an optional **Branch** field:
   HEAD against that remote tip; pick this if you want to be notified when the
   remote moves even if you don't have the branch checked out.
 
-The add/edit form renders the Branch field as a **dropdown** (`<select>`)
-populated from `/folders/<id>/branches/` (saved folders) or
-`/folders/branches/?path=...` (unsaved paths): the current branch is marked,
-remoteless branches appear disabled with a `— no remote` marker, and the
-first option is the empty default (checked-out branch). A saved branch that
-no longer exists in the repo is kept as `(missing from repo)` so it stays
-visible and editable.
+The add/edit form renders the Branch field as a **dropdown** listing
+**remote branches only**, as short names (`main`, `dev`) — the watcher
+tracks remote changes, so the choice space is what exists on the remote.
+The currently checked-out branch is marked `(current)`.
+
+**Auto-checkout**: when the watched branch exists on the remote but has
+no local checkout, the watcher creates it tracking `origin/<branch>` and
+checks it out on the next scan (`git checkout -B <branch> --track
+origin/<branch>`). This requires a clean working tree; with local
+changes the checkout is skipped and the branch is watched via its
+remote-tracking ref instead.
 
 ## Configuration page (token)
 

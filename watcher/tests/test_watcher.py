@@ -701,7 +701,7 @@ class QuickAddTests(TestCase, RepoFixture):
 
 class BranchChoicesTests(TestCase, RepoFixture):
     @mock.patch("watcher.git.run_git")
-    def test_dedupe_local_and_remote(self, run_git_mock):
+    def test_branch_choices_remote_only(self, run_git_mock):
         def side_effect(*args, **kwargs):
             cmd = args[1:]
             if cmd == ("branch", "--format=%(refname:short)"):
@@ -710,20 +710,20 @@ class BranchChoicesTests(TestCase, RepoFixture):
                 return git_out("origin/main\norigin/feature")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
-            if cmd == ("remote",):
-                return git_out("origin")
             return git_out()
 
         run_git_mock.side_effect = side_effect
         repo = GitRepo("/tmp/fake/repo-a")
         choices = repo.branch_choices()
+        # remote-only listing, short names
         names = [c["name"] for c in choices]
-        self.assertEqual(names, ["main", "dev", "origin/feature"])
+        self.assertEqual(names, ["main", "feature"])
         by_name = {c["name"]: c for c in choices}
         self.assertTrue(by_name["main"]["remote"])
-        self.assertFalse(by_name["dev"]["remote"])
         self.assertTrue(by_name["main"]["current"])
-        self.assertFalse(by_name["dev"]["current"])
+        self.assertTrue(by_name["main"]["has_local"])
+        self.assertFalse(by_name["feature"]["current"])
+        self.assertFalse(by_name["feature"]["has_local"])
 
     @mock.patch("watcher.git.run_git")
     def test_remote_only_branch_kept(self, run_git_mock):
@@ -735,14 +735,15 @@ class BranchChoicesTests(TestCase, RepoFixture):
                 return git_out("origin/main\norigin/release")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
-            if cmd == ("remote",):
-                return git_out("origin")
             return git_out()
 
         run_git_mock.side_effect = side_effect
         repo = GitRepo("/tmp/fake/repo-a")
         names = [c["name"] for c in repo.branch_choices()]
-        self.assertEqual(names, ["main", "origin/release"])
+        self.assertEqual(names, ["main", "release"])
+        by_name = {c["name"]: c for c in repo.branch_choices()}
+        self.assertTrue(by_name["release"]["remote"])
+        self.assertFalse(by_name["release"]["has_local"])
 
     @mock.patch("watcher.git.run_git")
     def test_no_remote_marks_all_disabled(self, run_git_mock):
@@ -763,7 +764,7 @@ class BranchChoicesTests(TestCase, RepoFixture):
         self.assertTrue(all(not c["remote"] for c in choices))
 
     @mock.patch("watcher.git.run_git")
-    def test_payload_disables_remoteless_branches(self, run_git_mock):
+    def test_payload_remote_only_entries(self, run_git_mock):
         from watcher.views import _branch_payload
 
         def side_effect(*args, **kwargs):
@@ -783,9 +784,9 @@ class BranchChoicesTests(TestCase, RepoFixture):
         self.assertTrue(payload["has_remote"])
         self.assertEqual(payload["no_remote_error"], "")
         by_name = {b["name"]: b for b in payload["branches"]}
+        # only remote branches are offered; all are selectable
+        self.assertEqual(list(by_name), ["main"])
         self.assertFalse(by_name["main"]["disabled"])
-        self.assertTrue(by_name["dev"]["disabled"])
-        self.assertNotIn("origin/main", by_name)
 
     @mock.patch("watcher.git.run_git")
     def test_payload_no_remote_error(self, run_git_mock):
@@ -846,16 +847,15 @@ class BranchChoicesTests(TestCase, RepoFixture):
                 return git_out("origin/main\norigin/feature/x")
             if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
                 return git_out("main")
-            if cmd == ("remote",):
-                return git_out("origin")
             return git_out()
 
         run_git_mock.side_effect = side_effect
         repo = GitRepo("/tmp/fake/repo-a")
         choices = repo.branch_choices()
-        self.assertEqual([c["name"] for c in choices], ["main", "origin/feature/x"])
+        self.assertEqual([c["name"] for c in choices], ["main", "feature/x"])
         by_name = {c["name"]: c for c in choices}
-        self.assertTrue(by_name["origin/feature/x"]["remote"])
+        self.assertTrue(by_name["feature/x"]["remote"])
+        self.assertFalse(by_name["feature/x"]["has_local"])
 
 
     @mock.patch("watcher.git.run_git")
@@ -2144,3 +2144,59 @@ class SafeDirectoryTests(TestCase, RepoFixture):
         self.assertIn(".git present: False", stderr)
         self.assertIn("git said:", stderr)
         self.assertIn("VIBE_WATCHER_PATH_MAP:", stderr)
+
+
+    @mock.patch("watcher.git.run_git")
+    def test_checkout_branch_invocation(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("status", "--porcelain"):
+                return git_out("")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        repo.checkout_branch("dev")
+        cmd = run_git_mock.call_args[0][1:]
+        self.assertEqual(cmd, ("checkout", "-B", "dev", "--track", "origin/dev"))
+
+    @mock.patch("watcher.git.run_git")
+    def test_checkout_branch_refuses_dirty_tree(self, run_git_mock):
+        run_git_mock.return_value = git_out(" M file.txt\n")
+        repo = GitRepo("/tmp/fake/repo-a")
+        with self.assertRaises(GitError) as ctx:
+            repo.checkout_branch("dev")
+        self.assertIn("dirty", str(ctx.exception))
+
+    @mock.patch("watcher.git.run_git")
+    def test_observe_auto_checkouts_missing_local_branch(self, run_git_mock):
+        from django.test import override_settings
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "HEAD"):
+                return git_out("abc123")
+            if cmd == ("rev-parse", "--abbrev-ref", "HEAD"):
+                return git_out("main")
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/r.git")
+            if cmd == ("status", "--porcelain"):
+                return git_out("")
+            if cmd == ("rev-parse", "--verify", "--quiet", "refs/heads/dev"):
+                return GitCommandResult([], stdout="", stderr="", returncode=1)
+            if cmd == ("rev-parse", "--verify", "--quiet", "refs/remotes/origin/dev"):
+                return git_out("def999")
+            if cmd[:2] == ("checkout", "-B"):
+                return git_out("Switched to branch 'dev'")
+            if cmd[0] == "rev-list" and cmd[1] == "--left-right":
+                return git_out("0\t0\n")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake/repo-a")
+        state = repo.observe(branch="dev")
+        checkout_calls = [
+            c for c in run_git_mock.call_args_list if c[0][1:3] == ("checkout", "-B")
+        ]
+        self.assertEqual(len(checkout_calls), 1)
+        self.assertIn("dev", state["branch"])
