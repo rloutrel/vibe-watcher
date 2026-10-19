@@ -2303,3 +2303,30 @@ class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):
         folder = self.make_folder(auto_pull=True)
         scanner.scan_folder(folder, backend=FakeBackend())
         fake.pull_ff_only.assert_not_called()
+
+
+class PullDisabledVisibilityTests(TestCase, RepoFixture):
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_behind_without_autopull_logs_explicit_event(self, GitRepoMock):
+        GitRepoMock.return_value = FakeRepo(observe_result(behind=2, head="dd11"))
+        folder = self.make_folder(auto_pull=False)
+        scanner.scan_folder(folder, backend=FakeBackend())
+        event = WatcherEvent.objects.filter(
+            message__contains="auto-pull is disabled"
+        ).first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.kind, "change")
+
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_pull_failure_logs_error_event_on_retry(self, GitRepoMock):
+        fake = FakeRepo(observe_result(behind=2, head="dd11"))
+        fake.pull_ff_only = mock.Mock(side_effect=GitError("not a fast-forward"))
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(auto_pull=True)
+        scanner.scan_folder(folder, backend=FakeBackend())
+        event = WatcherEvent.objects.filter(
+            message__contains="auto-pull failed"
+        ).first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.kind, "error")
+        self.assertIn("not a fast-forward", event.message)

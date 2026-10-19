@@ -127,7 +127,7 @@ def scan_folder(folder, repo=None, backend=None):
         if action_result["pulled"]:
             record_event(
                 "change",
-                f"{folder.name}: auto-pulled {action_result['pulled'] and 'to remote head' or ''}".rstrip(),
+                f"{folder.name}: auto-pulled to remote head",
                 folder=folder,
                 detail={
                     "head": head,
@@ -136,6 +136,22 @@ def scan_folder(folder, repo=None, backend=None):
                     "command_ok": action_result["command_ok"],
                     "command_output": action_result["command_output"][-500:],
                 },
+            )
+        elif action_result["pull_error"]:
+            # pull configured but failed (dirty tree / diverged): say so
+            # loudly instead of looping on 'already notified'
+            record_event(
+                "error",
+                f"{folder.name}: auto-pull failed — {action_result['pull_error']}",
+                folder=folder,
+                detail={"head": head, "retried": already_notified(folder, head)},
+            )
+        elif not folder.auto_pull:
+            record_event(
+                "change",
+                f"{folder.name}: behind by {state['commits_behind']} commit(s); auto-pull is disabled",
+                folder=folder,
+                detail={"head": head, "auto_pull": False},
             )
 
         if already_notified(folder, head):
