@@ -64,6 +64,15 @@ home directory read-only at `/home/hostuser` so you can point folders at
 `/home/hostuser/code/...`. Desktop notifications are disabled by default in
 compose (`WATCHER_NOTIFY_BACKEND=none`) because containers have no session bus.
 
+Create the admin user (first-time setup):
+
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+(Interactive prompt; run it while the stack is up. Use `docker compose exec
+web` for any other `manage.py` command too.)
+
 ## Configuration (12-factor env vars)
 
 All configuration is environment-driven, both for compose and the systemd
