@@ -22,28 +22,24 @@ watcher heartbeat indicator that flags a stale or stopped watcher.
 | Compose setup | `compose/docker-compose.yml` |
 | Tests | `watcher/tests/` |
 
-## Quickstart (recommended: systemd user service)
-
-Running the watcher as your own user — not in Docker — is the best setup
-for a personal machine: native paths (no mount translation), desktop
-notifications work out of the box, and `docker compose` runs as **you**.
+## Quickstart (docker compose)
 
 ```bash
 git clone https://github.com/rloutrel/vibe-watcher ~/vibe-watcher
-cd ~/vibe-watcher
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py createsuperuser
-./packaging/systemd/install.sh --user
+cd ~/vibe-watcher/compose
+cp .env.example .env                 # adjust VIBE_WATCHER_PROJECTS_DIR etc.
+docker compose up --build -d
+docker compose exec web python manage.py createsuperuser
 ```
 
-The web UI runs with `python manage.py runserver` (or any WSGI server)
-in another terminal; the watcher itself is the systemd user service.
-Adjust `~/.config/vibe-watcher/env` (projects base, notification
-backend) — see the packaging env example.
+Web UI on `http://localhost:28888` (override with
+`VIBE_WATCHER_WEB_PORT`). Set `VIBE_WATCHER_PROJECTS_DIR` in
+`compose/.env` to the host folder holding your projects — it is mounted
+at the same path in the containers, so register folders with their host
+paths. Desktop notifications are unavailable in compose (no session
+bus); use the systemd user service below if you need them.
 
-A plain local run (no service) also works:
+A plain local run also works:
 
 ```bash
 python manage.py runserver          # terminal 1: web UI at http://127.0.0.1:8000
@@ -78,20 +74,9 @@ can optionally select a specific **branch to watch**: the branch picker lists
 everything available in the repo (local and remote, via `git branch -a`);
 leave it empty to watch the currently checked-out branch.
 
-## Compose setup (optional)
+## Compose details
 
-Works, but for a personal desktop machine the systemd user service above
-is simpler and safer: compose needs the Docker socket mounted (root-level
-access), desktop notifications are unavailable, and paths/mounts add
-moving parts. Prefer compose only for headless servers or when you want
-the stack fully containerized.
-
-```bash
-cd compose
-docker compose up --build -d
-```
-
-Runs three services: `web` (Django dev server published on host port
+The stack runs three services: `web` (Django dev server published on host port
 **28888** — override with `VIBE_WATCHER_WEB_PORT` in `compose/.env`),
 `watcher`
 (`manage.py watch_folders`), and `db` (PostgreSQL 16). Your projects are mounted in the containers **at their host paths**
@@ -139,6 +124,10 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_LOG_LEVEL` | `INFO` | Log level for the JSON stdout logger |
 
 ## Installing as a systemd service
+
+Alternative to the compose setup, and the only way to get **desktop
+notifications** (D-Bus session bus): run the watcher as a systemd
+service on the host instead of in Docker.
 
 The watcher is designed to run as a long-lived foreground process managed by
 systemd — not cron, not a scheduler thread. Two unit files are provided:
