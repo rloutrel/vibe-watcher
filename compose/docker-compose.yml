@@ -20,7 +20,8 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate --noinput &&
+      sh -c "pip install --no-cache-dir -q -r requirements.txt &&
+             python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
 
   watcher:
@@ -42,7 +43,8 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate --noinput &&
+      sh -c "pip install --no-cache-dir -q -r requirements.txt &&
+             python manage.py migrate --noinput &&
              python manage.py watch_folders"
 
   db:
