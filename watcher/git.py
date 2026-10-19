@@ -691,3 +691,26 @@ def find_repos(base_path, max_depth=3, max_results=200):
 
     walk(real_base, 0)
     return repos[:max_results], ("truncated" if truncated else "")
+
+
+def code_version():
+    """Short commit hash of the running code, or 'unknown'.
+
+    Determined from the git checkout containing this module — the bind
+    mount means this reflects what the *process* sees on disk. When the
+    app is served from a directory without git metadata (pip install,
+    image copy), returns 'unknown'.
+    """
+    import os
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", os.path.dirname(__file__), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"

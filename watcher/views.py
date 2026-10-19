@@ -40,6 +40,8 @@ def index(request):
         latest_by_folder[folder.id] = Snapshot.objects.filter(folder=folder).first()
     rows = [(folder, latest_by_folder.get(folder.id)) for folder in folders]
     events = WatcherEvent.objects.select_related("folder")[:50]
+    from .git import code_version
+
     return render(
         request,
         "watcher/index.html",
@@ -47,6 +49,7 @@ def index(request):
             "rows": rows,
             "events": events,
             "watcher": watcher_status(),
+            "code_version": code_version(),
         },
     )
 
