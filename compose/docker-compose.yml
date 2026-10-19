@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "${VIBE_WATCHER_WEB_PORT:-28888}:8000"
     environment:
       VIBE_WATCHER_DEBUG: "1"
       VIBE_WATCHER_ALLOWED_HOSTS: "*"

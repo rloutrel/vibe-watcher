@@ -53,10 +53,12 @@ leave it empty to watch the currently checked-out branch.
 
 ```bash
 cd compose
-docker compose up --build
+docker compose up --build -d
 ```
 
-Runs three services: `web` (Django dev server on :8000), `watcher`
+Runs three services: `web` (Django dev server published on host port
+**28888** — override with `VIBE_WATCHER_WEB_PORT` in `compose/.env`),
+`watcher`
 (`manage.py watch_folders`), and `db` (PostgreSQL 16). The watcher mounts your
 home directory read-only at `/home/hostuser` so you can point folders at
 `/home/hostuser/code/...`. Desktop notifications are disabled by default in
