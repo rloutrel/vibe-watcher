@@ -320,9 +320,11 @@ setup: repos cloned over **SSH** while you want the watcher to fetch over
 
 **Per-project token** (optional): each folder can define its own token in
 the form (password field; leave empty to use the global one, empty on
-edit keeps the existing value). **Open-source/public repos need no token
-at all**: the watcher fetches over anonymous HTTPS, so only private
-repositories require one. **Read-only**: the watcher only ever fetches,
+edit keeps the existing value). **Open-source/public repos never consume
+a token**: every fetch is attempted anonymously first, and the token is
+only sent when the anonymous fetch fails with an authentication error
+(i.e. the repo is private). This avoids leaking tokens to public hosts
+and keeps public-repo traffic off your API rate limits. **Read-only**: the watcher only ever fetches,
 so a GitHub fine-grained PAT with just *Contents: Read-only* works
 (create it at github.com/settings/personal-access-tokens). Tokens are
 never included in config exports.

@@ -132,6 +132,25 @@ def run_git(repo_path, *args, check=True):
     )
 
 
+def https_remote_without_token(url):
+    """Strip the user:token@ part from an HTTPS remote URL."""
+    import re as _re
+
+    return _re.sub(r"https://[^@/]+@", "https://", url)
+
+
+def _last_fetch_error(repo_path):
+    """Best-effort read of the last fetch error (run in-process cache)."""
+    return _LAST_FETCH_ERROR.get(str(repo_path), "")
+
+
+_LAST_FETCH_ERROR = {}
+
+
+def _remember_fetch_error(repo_path, stderr):
+    _LAST_FETCH_ERROR[str(repo_path)] = (stderr or "")[:500]
+
+
 class GitRepo:
     """Read-only observation helpers for a local git checkout."""
 
@@ -491,8 +510,36 @@ class GitRepo:
         auth = f"{token}@" if token else ""
         return f"https://{auth}{host}/{path}.git"
 
+    ANON_FETCH_HINTS = (
+        "authentication failed",
+        "could not read username",
+        "terminal prompts disabled",
+        "403",
+        "repository not found",
+        "not found",
+    )
+
+    def _https_fetch(self, url):
+        """Fetch url into origin/* refs. Returns (ok, anonymous)."""
+        res = run_git(
+            self.path,
+            "fetch",
+            url,
+            f"+refs/heads/*:refs/remotes/origin/*",
+            "--quiet",
+            check=False,
+        )
+        _remember_fetch_error(self.path, res.stderr)
+        return res.ok, "token@" not in url
+
     def fetch_with_token(self):
-        """Fetch over the HTTPS remote URL (token or anonymous).
+        """Fetch over HTTPS; try anonymous first, token only if needed.
+
+        Open-source projects are fetched WITHOUT the token (a public repo
+        needs no authentication, and not sending the token avoids leaking
+        it to any host and avoids rate-limit coupling to the account). A
+        private repo makes the anonymous fetch fail with an auth error,
+        and the token fetch is retried only then.
 
         Returns True when an HTTPS fetch was attempted; False when the
         caller should fall back to the plain fetch (no HTTPS-convertible
@@ -501,28 +548,18 @@ class GitRepo:
         https_url = self.https_remote_url()
         if not https_url:
             return False
-        run_git(
-            self.path,
-            "fetch",
-            https_url,
-            f"+refs/heads/*:refs/remotes/origin/*",
-            "--quiet",
-            check=False,
-        )
+        token = self.token or os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
+        anonymous_url = https_remote_without_token(https_url)
+        ok, _ = self._https_fetch(anonymous_url)
+        if not ok and token:
+            lowered = _last_fetch_error(self.path) or ""
+            if any(h in lowered for h in self.ANON_FETCH_HINTS):
+                self._https_fetch(https_url)
         return True
 
     def pull_ff_only_with_token(self, branch=None):
-        """Fast-forward pull fetching over the HTTPS URL first."""
-        https_url = self.https_remote_url()
-        if https_url:
-            run_git(
-                self.path,
-                "fetch",
-                https_url,
-                f"+refs/heads/*:refs/remotes/origin/*",
-                "--quiet",
-                check=False,
-            )
+        """Fast-forward pull, anonymous HTTPS fetch first, token fallback."""
+        self.fetch_with_token()
         return run_git(self.path, "pull", "--ff-only", "--quiet")
 
 

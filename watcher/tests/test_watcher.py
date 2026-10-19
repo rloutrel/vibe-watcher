@@ -1712,7 +1712,7 @@ class TokenConfigTests(TestCase, RepoFixture):
             )
 
     @mock.patch("watcher.git.run_git")
-    def test_fetch_with_token_uses_https_url(self, run_git_mock):
+    def test_fetch_anonymous_first_for_public_repos(self, run_git_mock):
         import os
 
         os.environ["VIBE_WATCHER_GIT_TOKEN"] = "tok123"
@@ -1728,8 +1728,53 @@ class TokenConfigTests(TestCase, RepoFixture):
         used = repo.fetch_with_token()
         self.assertTrue(used)
         fetch_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "fetch"]
-        self.assertTrue(fetch_calls)
-        self.assertIn("https://tok123@github.com/me/my-repo.git", fetch_calls[0][0])
+        # exactly one fetch, anonymous: open-source repos never see the token
+        self.assertEqual(len(fetch_calls), 1)
+        self.assertIn("https://github.com/me/my-repo.git", fetch_calls[0][0])
+        self.assertNotIn("tok123", str(fetch_calls[0][0]))
+
+    @mock.patch("watcher.git.run_git")
+    def test_fetch_falls_back_to_token_for_private(self, run_git_mock):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "tok123"
+        calls = []
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/private-repo.git")
+            if cmd[0] == "fetch":
+                calls.append(cmd)
+                if len(calls) == 1:
+                    return GitCommandResult(
+                        [], stdout="",
+                        stderr="fatal: could not read Username for "
+                               "'https://github.com': terminal prompts disabled",
+                        returncode=128,
+                    )
+                return GitCommandResult([], stdout="", stderr="", returncode=0)
+            return GitCommandResult([], stdout="", stderr="", returncode=0)
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/private")
+        used = repo.fetch_with_token()
+        self.assertTrue(used)
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("tok123", str(calls[0]))     # anonymous attempt
+        self.assertIn("tok123", str(calls[1]))        # token retry
+
+    def test_https_url_strips_token(self):
+        from watcher.git import https_remote_without_token
+
+        self.assertEqual(
+            https_remote_without_token("https://tok@github.com/me/r.git"),
+            "https://github.com/me/r.git",
+        )
+        self.assertEqual(
+            https_remote_without_token("https://github.com/me/r.git"),
+            "https://github.com/me/r.git",
+        )
 
     def test_watch_folders_loads_token_from_db(self):
         import os
