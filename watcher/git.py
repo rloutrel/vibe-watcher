@@ -16,10 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class GitError(Exception):
-    def __init__(self, message, stderr="", returncode=None):
+    def __init__(self, message, stderr="", returncode=None, command=None):
         super().__init__(message)
         self.stderr = stderr
         self.returncode = returncode
+        self.command = command
 
 
 class GitCommandResult:
@@ -116,6 +117,7 @@ def run_git(repo_path, *args, check=True):
             f"git {' '.join(args)} failed with code {proc.returncode}{hint}",
             stderr=proc.stderr,
             returncode=proc.returncode,
+            command=f"git -C {repo_path} {' '.join(str(a) for a in args)}",
         )
     return GitCommandResult(
         args, stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode
@@ -126,6 +128,7 @@ class GitRepo:
     """Read-only observation helpers for a local git checkout."""
 
     def __init__(self, path, token=None):
+        self.registered_path = str(path)
         self.path = map_path(path)
         self.token = token
 
@@ -335,7 +338,21 @@ class GitRepo:
         Raises GitError if the repo cannot be inspected at all.
         """
         if not self.is_repo():
-            raise GitError("not a git repository")
+            import os
+
+            exists = os.path.exists(self.path)
+            isdir = os.path.isdir(self.path)
+            raise GitError(
+                "not a git repository",
+                stderr=(
+                    f"registered path: {self.registered_path}\n"
+                    f"resolved path:   {self.path}\n"
+                    f"exists: {exists}, is directory: {isdir}\n"
+                    f"VIBE_WATCHER_PATH_MAP: {os.environ.get('VIBE_WATCHER_PATH_MAP') or '(unset)'}\n"
+                    f"VIBE_WATCHER_PROJECTS_BASE: {os.environ.get('VIBE_WATCHER_PROJECTS_BASE') or '(unset)'}"
+                ),
+                command=f"git -C {self.path} rev-parse --git-dir",
+            )
         if not self.has_commits():
             # Repo without any commit (fresh git init): nothing to watch yet.
             return {

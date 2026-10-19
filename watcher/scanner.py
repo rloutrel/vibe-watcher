@@ -81,10 +81,27 @@ def scan_folder(folder, repo=None, backend=None):
             state="error",
             error=str(exc),
         )
-        record_event("error", str(exc), folder=folder, detail={"stderr": exc.stderr})
+        record_event(
+            "error",
+            str(exc),
+            folder=folder,
+            detail={
+                "stderr": exc.stderr,
+                "command": getattr(exc, "command", ""),
+                "registered_path": getattr(repo, "registered_path", folder.path),
+                "resolved_path": getattr(repo, "path", ""),
+            },
+        )
         logger.warning(
             "folder scan failed",
-            extra={"folder": folder.name, "error": str(exc)},
+            extra={
+                "folder": folder.name,
+                "error": str(exc),
+                "command": getattr(exc, "command", ""),
+                "registered_path": getattr(repo, "registered_path", folder.path),
+                "resolved_path": getattr(repo, "path", ""),
+                "stderr": exc.stderr,
+            },
         )
         return snapshot
 
