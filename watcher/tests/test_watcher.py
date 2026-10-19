@@ -1525,17 +1525,16 @@ class PathMapTests(TestCase, RepoFixture):
         self.assertEqual(run_git_mock.call_args[0][0], "/home/hostuser/Basil/repo")
 
     @mock.patch("watcher.actions.subprocess")
-    def test_post_pull_command_runs_in_mapped_path(self, subprocess_mod):
-        import os
-
+    def test_post_pull_command_runs_in_folder_path(self, subprocess_mod):
+        # With the same-path mount strategy (projects mounted at their host
+        # path), commands run directly in the registered path — no mapping.
         from watcher.actions import run_post_pull_command
 
-        os.environ["VIBE_WATCHER_PATH_MAP"] = "/home/romain:/home/hostuser"
         subprocess_mod.run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
         folder = self.make_folder(path="/home/romain/Basil/repo")
         run_post_pull_command(folder, "docker compose up -d")
         self.assertEqual(
-            subprocess_mod.run.call_args[1]["cwd"], "/home/hostuser/Basil/repo"
+            subprocess_mod.run.call_args[1]["cwd"], "/home/romain/Basil/repo"
         )
 
 

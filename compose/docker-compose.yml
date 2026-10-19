@@ -1,5 +1,13 @@
 name: vibe-watcher
 
+# How this works:
+#  - Your projects are mounted at the SAME path inside the containers as on
+#    the host (VIBE_WATCHER_PROJECTS_DIR, default $HOME). Identical paths
+#    mean no PATH_MAP translation, and docker compose commands the watcher
+#    runs inside the container work on the host daemon with correct paths.
+#  - The watcher mounts the Docker socket so `docker compose up -d` in a
+#    project spawns real host containers.
+
 services:
   web:
     build:
@@ -16,11 +24,11 @@ services:
       POSTGRES_PASSWORD: vibewatcher
       POSTGRES_HOST: db
       WATCHER_NOTIFY_BACKEND: "none"
-      VIBE_WATCHER_PATH_MAP: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects"
-      VIBE_WATCHER_PROJECTS_BASE: "/projects"
+      VIBE_WATCHER_PROJECTS_BASE: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}"
     volumes:
       - ..:/app
-      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
@@ -41,11 +49,11 @@ services:
       POSTGRES_PASSWORD: vibewatcher
       POSTGRES_HOST: db
       WATCHER_NOTIFY_BACKEND: "none"
-      VIBE_WATCHER_PATH_MAP: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects"
-      VIBE_WATCHER_PROJECTS_BASE: "/projects"
+      VIBE_WATCHER_PROJECTS_BASE: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}"
     volumes:
       - ..:/app
-      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy

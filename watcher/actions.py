@@ -9,7 +9,7 @@ import subprocess
 
 from django.conf import settings
 
-from .git import GitError, map_path
+from .git import GitError
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def run_post_pull_command(folder, command):
     argv = ["sh", "-c", command]
     try:
         proc = subprocess.run(
-            argv, cwd=map_path(folder.path), capture_output=True, text=True,
+            argv, cwd=folder.path, capture_output=True, text=True,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -145,11 +145,22 @@ def find_compose_file(path):
     return None
 
 
+def _compose_args(args):
+    """Prefer compose v2 (docker compose), fall back to docker-compose v1."""
+    probe = subprocess.run(
+        ["docker", "compose", "version"], capture_output=True, text=True,
+        timeout=30,
+    )
+    if probe.returncode == 0:
+        return ["docker", "compose", *args]
+    return ["docker-compose", *args]
+
+
 def _run_docker(args, cwd):
     """Seam for tests: actually invokes docker when unmocked."""
     try:
         return subprocess.run(
-            ["docker", *args], cwd=map_path(cwd), capture_output=True, text=True,
+            _compose_args(args), cwd=cwd, capture_output=True, text=True,
             timeout=60,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):

@@ -71,15 +71,13 @@ docker compose up --build -d
 Runs three services: `web` (Django dev server published on host port
 **28888** — override with `VIBE_WATCHER_WEB_PORT` in `compose/.env`),
 `watcher`
-(`manage.py watch_folders`), and `db` (PostgreSQL 16). The watcher mounts your projects at `/projects` in the containers. Set
-`VIBE_WATCHER_PROJECTS_DIR` in `compose/.env` to the host folder holding
-your projects (defaults to `$HOME`); it is mounted read-write at
-`/projects`, and compose sets `VIBE_WATCHER_PATH_MAP` accordingly. You
-register folders with your real **host** paths
-(`$HOME/projects/my-repo`) and the watcher translates them to its
-container view automatically. Without that mapping, every scan would fail
-with "not a git repository" because the host path doesn't exist inside
-the container. Desktop notifications are disabled by default in
+(`manage.py watch_folders`), and `db` (PostgreSQL 16). Your projects are mounted in the containers **at their host paths**
+(`VIBE_WATCHER_PROJECTS_DIR`, default `$HOME` — set it in
+`compose/.env`). Identical paths on both sides mean no translation:
+registered host paths work as-is, and `docker compose` commands the
+watcher runs against your projects operate on the **host Docker daemon**
+(the socket is mounted) with correct paths. The image ships the docker
+CLI and compose (v2 with v1 fallback). Desktop notifications are disabled by default in
 compose (`WATCHER_NOTIFY_BACKEND=none`) because containers have no session bus.
 
 Create the admin user (first-time setup):
@@ -107,9 +105,9 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_BACKEND` | `dbus` | `dbus` (notify-send) or `none` |
 | `WATCHER_NOTIFY_APP_NAME` | `vibe-watcher` | `-a` app name passed to notify-send |
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
-| `VIBE_WATCHER_PATH_MAP` | unset | Comma-separated `host_prefix:container_prefix` pairs translating registered folder paths into the watcher's filesystem view (compose sets `$VIBE_WATCHER_PROJECTS_DIR:/projects`) |
+| `VIBE_WATCHER_PATH_MAP` | unset | Optional comma-separated `host_prefix:container_prefix` path translation (not needed with the same-path compose mount) |
 | `VIBE_WATCHER_PROJECTS_DIR` | `$HOME` | (compose) host base folder mounted at `/projects` in the containers |
-| `VIBE_WATCHER_PROJECTS_BASE` | `~` | Base directory scanned for the project dropdown (compose: `/projects`) |
+| `VIBE_WATCHER_PROJECTS_BASE` | `~` | Base directory scanned for the project dropdown (compose: your projects dir, same path as the host) |
 | `VIBE_WATCHER_FETCH_BEFORE_SCAN` | `1` | Run `git fetch --all` before each scan so remote changes are actually detected |
 | `VIBE_WATCHER_CONFIG_PATH` | unset | On-disk config copy the service rewrites on every folder change and restores from at startup when the DB is empty |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |
