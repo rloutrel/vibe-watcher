@@ -1226,13 +1226,13 @@ class AutoPullTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_pull_and_command_run_on_change(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=2, head="cafe11", branch="main"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         run_cmd_mock.return_value = (True, "Container started", "")
         folder = self.make_folder_auto()
         backend = FakeBackend()
         scanner.scan_folder(folder, backend=backend)
-        fake.pull_ff_only.assert_called_once()
+        fake.pull_ff_only_with_token.assert_called_once()
         run_cmd_mock.assert_called_once()
         called_folder, called_command = run_cmd_mock.call_args[0]
         self.assertEqual(called_command, "docker compose up --build -d")
@@ -1245,12 +1245,12 @@ class AutoPullTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_pull_failure_reports_and_skips_command(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=2, head="cafe11"))
-        fake.pull_ff_only = mock.Mock(side_effect=GitError("not a fast-forward"))
+        fake.pull_ff_only_with_token = mock.Mock(side_effect=GitError("not a fast-forward"))
         GitRepoMock.return_value = fake
         folder = self.make_folder_auto()
         backend = FakeBackend()
         scanner.scan_folder(folder, backend=backend)
-        fake.pull_ff_only.assert_called_once()
+        fake.pull_ff_only_with_token.assert_called_once()
         run_cmd_mock.assert_not_called()
         self.assertIn("Auto-pull failed", backend.notifications[0][1])
         event = WatcherEvent.objects.filter(kind="change").first()
@@ -1261,23 +1261,23 @@ class AutoPullTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_no_pull_when_auto_pull_off(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=2, head="cafe11"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         folder = self.make_folder(auto_pull=False, post_pull_command="echo hi")
         scanner.scan_folder(folder, backend=FakeBackend())
-        fake.pull_ff_only.assert_not_called()
+        fake.pull_ff_only_with_token.assert_not_called()
         run_cmd_mock.assert_not_called()
 
     @mock.patch("watcher.actions.run_post_pull_command")
     @mock.patch("watcher.scanner.GitRepo")
     def test_pull_without_command(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=2, head="cafe11"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         folder = self.make_folder(auto_pull=True, post_pull_command="")
         backend = FakeBackend()
         scanner.scan_folder(folder, backend=backend)
-        fake.pull_ff_only.assert_called_once()
+        fake.pull_ff_only_with_token.assert_called_once()
         run_cmd_mock.assert_not_called()
         self.assertIn("Pulled.", backend.notifications[0][1])
 
@@ -1285,7 +1285,7 @@ class AutoPullTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_command_failure_reported(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=2, head="cafe11"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         run_cmd_mock.return_value = (False, "", "compose: command not found")
         folder = self.make_folder_auto()
@@ -2270,7 +2270,7 @@ class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):
         from watcher.models import NotifiedCommit
 
         fake = FakeRepo(observe_result(behind=2, head="cafe99", branch="main"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         run_cmd_mock.return_value = (True, "ok", "")
         folder = self.make_folder(auto_pull=True, post_pull_command="docker compose up -d")
@@ -2283,10 +2283,10 @@ class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):
 
         # second scan of the same commit (e.g. first pull had failed):
         # pull + post-pull command must run again
-        fake.pull_ff_only.reset_mock()
+        fake.pull_ff_only_with_token.reset_mock()
         run_cmd_mock.reset_mock()
         scanner.scan_folder(folder, backend=FakeBackend())
-        fake.pull_ff_only.assert_called_once()
+        fake.pull_ff_only_with_token.assert_called_once()
         run_cmd_mock.assert_called_once()
         event = WatcherEvent.objects.filter(
             message__contains="auto-pulled"
@@ -2298,11 +2298,11 @@ class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_no_pull_when_folder_current(self, GitRepoMock, run_cmd_mock):
         fake = FakeRepo(observe_result(behind=0, head="cafe99"))
-        fake.pull_ff_only = mock.Mock()
+        fake.pull_ff_only_with_token = mock.Mock()
         GitRepoMock.return_value = fake
         folder = self.make_folder(auto_pull=True)
         scanner.scan_folder(folder, backend=FakeBackend())
-        fake.pull_ff_only.assert_not_called()
+        fake.pull_ff_only_with_token.assert_not_called()
 
 
 class PullDisabledVisibilityTests(TestCase, RepoFixture):
@@ -2320,7 +2320,7 @@ class PullDisabledVisibilityTests(TestCase, RepoFixture):
     @mock.patch("watcher.scanner.GitRepo")
     def test_pull_failure_logs_error_event_on_retry(self, GitRepoMock):
         fake = FakeRepo(observe_result(behind=2, head="dd11"))
-        fake.pull_ff_only = mock.Mock(side_effect=GitError("not a fast-forward"))
+        fake.pull_ff_only_with_token = mock.Mock(side_effect=GitError("not a fast-forward"))
         GitRepoMock.return_value = fake
         folder = self.make_folder(auto_pull=True)
         scanner.scan_folder(folder, backend=FakeBackend())
@@ -2368,3 +2368,27 @@ class HttpsPullTests(TestCase, RepoFixture):
         repo.pull_ff_only_with_token()
         merge_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "merge"]
         self.assertEqual(merge_calls[0][0][1:], ("merge", "--ff-only", "origin/main"))
+
+
+class UnifiedPullTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_pull_without_token_never_runs_git_pull(self, run_git_mock):
+        # No token configured: the pull must still merge fetched refs,
+        # never `git pull` (which hits the SSH remote).
+        import os
+
+        os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+        repo = GitRepo("/tmp/fake")
+        repo.pull_ff_only(branch="main")
+        calls = [c[0][1] for c in run_git_mock.call_args_list]
+        self.assertIn("merge", calls)
+        self.assertNotIn("pull", calls)
+
+    @mock.patch("watcher.git.run_git")
+    def test_pull_ff_only_with_token_fetches_then_merges(self, run_git_mock):
+        repo = GitRepo("/tmp/fake", token="tok")
+        repo.pull_ff_only_with_token(branch="main")
+        calls = [c[0][1] for c in run_git_mock.call_args_list]
+        self.assertEqual(calls.count("fetch"), 1)
+        self.assertEqual(calls.count("merge"), 1)
+        self.assertNotIn("pull", calls)

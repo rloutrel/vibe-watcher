@@ -330,13 +330,18 @@ class GitRepo:
     def pull_ff_only(self, branch=None):
         """Fast-forward-only pull: never creates merges or conflicts.
 
-        Raises GitError if the pull is not a fast-forward (local commits
-        diverge) or the working tree is dirty — the user must intervene.
+        Merges the already-fetched origin/* refs (the scanner always
+        fetches over HTTPS before observing) instead of running `git
+        pull`, which would contact the configured — often SSH — remote
+        that containers cannot authenticate against.
+        Raises GitError when not a fast-forward or the tree is dirty.
         """
-        if branch and branch != self.current_branch():
-            # Pull the watched remote-tracking ref into the local branch.
-            run_git(self.path, "fetch", "origin", f"{branch}:{branch}", check=False)
-        return run_git(self.path, "pull", "--ff-only", "--quiet")
+        if branch:
+            ref = f"origin/{branch}"
+        else:
+            up = self.upstream_name()
+            ref = up if up else "origin/HEAD"
+        return run_git(self.path, "merge", "--ff-only", ref)
 
     def fetch(self):
         """Fetch the remote so remote-tracking refs reflect reality.
@@ -578,12 +583,7 @@ class GitRepo:
         against.
         """
         self.fetch_with_token()
-        if branch:
-            ref = f"origin/{branch}"
-        else:
-            up = self.upstream_name()
-            ref = up if up else "origin/HEAD"
-        return run_git(self.path, "merge", "--ff-only", ref)
+        return self.pull_ff_only(branch=branch)
 
 
 NO_REMOTE_MESSAGE = (
