@@ -2386,6 +2386,13 @@ class UnifiedPullTests(TestCase, RepoFixture):
 
     @mock.patch("watcher.git.run_git")
     def test_pull_ff_only_with_token_fetches_then_merges(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("https://github.com/me/r.git")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
         repo = GitRepo("/tmp/fake", token="tok")
         repo.pull_ff_only_with_token(branch="main")
         calls = [c[0][1] for c in run_git_mock.call_args_list]
