@@ -208,3 +208,25 @@ class NotificationState(models.Model):
 
     def __str__(self):
         return f"{self.app_name}:{self.notification_key} -> {self.notification_id}"
+
+
+class AppSetting(models.Model):
+    """Simple key/value store for service configuration (e.g. git token)."""
+
+    key = models.CharField(max_length=100, unique=True)
+    value = models.TextField(blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.key
+
+    @classmethod
+    def get(cls, key, default=""):
+        try:
+            return cls.objects.get(key=key).value
+        except cls.DoesNotExist:
+            return default
+
+    @classmethod
+    def set(cls, key, value):
+        cls.objects.update_or_create(key=key, defaults={"value": value})

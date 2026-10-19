@@ -1,4 +1,5 @@
 import json
+import os
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -13,7 +14,7 @@ from .consts import DEFAULT_POLL_INTERVAL
 from .forms import FolderForm
 from .git import (NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo,
                   expand_path, list_dir_entries)
-from .models import Folder, Snapshot, WatcherEvent, WatcherStatus
+from .models import Folder, Snapshot, WatcherEvent, WatcherStatus, redact
 
 
 def watcher_status():
@@ -288,3 +289,46 @@ def folder_check_now(request, pk):
             "error": snapshot.error,
         }
     )
+
+
+def _token_masked():
+    from .models import AppSetting
+
+    token = AppSetting.get("git_token")
+    if not token:
+        return None, "No token configured."
+    return token, f"Configured: {redact(token)} (leave blank to keep)"
+
+
+@login_required
+def config_page(request):
+    token, status = _token_masked()
+    return render(
+        request,
+        "watcher/config.html",
+        {
+            "token_hint": "ghp_••••••••••••••••••••" if token else "",
+            "token_status": status,
+        },
+    )
+
+
+@login_required
+@require_POST
+def config_token(request):
+    from .models import AppSetting
+
+    token = (request.POST.get("token") or "").strip()
+    if token:
+        AppSetting.set("git_token", token)
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = token
+    return redirect("watcher:config-page")
+
+
+@login_required
+def config_token_delete(request):
+    from .models import AppSetting
+
+    AppSetting.objects.filter(key="git_token").delete()
+    os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+    return redirect("watcher:config-page")

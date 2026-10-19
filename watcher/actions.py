@@ -56,7 +56,12 @@ def apply_updates(folder, repo, state):
         return result
 
     try:
-        repo.pull_ff_only(branch=folder.branch or None)
+        import os
+
+        if os.environ.get("VIBE_WATCHER_GIT_TOKEN"):
+            repo.pull_ff_only_with_token(branch=folder.branch or None)
+        else:
+            repo.pull_ff_only(branch=folder.branch or None)
         result["pulled"] = True
     except GitError as exc:
         result["pull_error"] = str(exc)

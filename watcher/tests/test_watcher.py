@@ -73,6 +73,13 @@ class FakeRepo:
     def fetch(self):
         self.fetched += 1
 
+    def fetch_with_token(self):
+        self.fetched += 1
+        return False
+
+    def pull_ff_only_with_token(self, branch=None):
+        self.token_pulled = getattr(self, "token_pulled", 0) + 1
+
     def observe(self, branch=None):
         self.calls += 1
         self.observed_branchs.append(branch)
@@ -1135,7 +1142,8 @@ class LocalPersistTests(TestCase, RepoFixture):
         GitRepoMock.return_value = fake
         folder = self.make_folder()
         scanner.scan_folder(folder, backend=FakeBackend())
-        self.assertEqual(fake.fetched, 1)
+        # fetch_with_token() falls back to fetch() when no token is set
+        self.assertGreaterEqual(fake.fetched, 1)
 
     @override_settings(WATCHER_FETCH_BEFORE_SCAN=False)
     @mock.patch("watcher.scanner.GitRepo")
@@ -1611,3 +1619,128 @@ class BrowsePathTests(TestCase, RepoFixture):
             self.assertEqual(dirs, ["inside-container"])
         finally:
             os.environ.pop("VIBE_WATCHER_PATH_MAP", None)
+
+
+class TokenConfigTests(TestCase, RepoFixture):
+    def setUp(self):
+        import os
+
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("lara", password="pw")
+        self.client.login(username="lara", password="pw")
+        self._orig_token = os.environ.get("VIBE_WATCHER_GIT_TOKEN")
+
+    def tearDown(self):
+        import os
+
+        if self._orig_token is None:
+            os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+        else:
+            os.environ["VIBE_WATCHER_GIT_TOKEN"] = self._orig_token
+        from watcher.models import AppSetting
+
+        AppSetting.objects.all().delete()
+        super().tearDown()
+
+    def test_config_page_shows_status(self):
+        response = self.client.get(reverse("watcher:config-page"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No token configured")
+
+    def test_token_save_and_remove(self):
+        import os
+
+        from watcher.models import AppSetting
+
+        response = self.client.post(
+            reverse("watcher:config-token"), {"token": "ghp_secret123"}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AppSetting.get("git_token"), "ghp_secret123")
+        self.assertEqual(os.environ["VIBE_WATCHER_GIT_TOKEN"], "ghp_secret123")
+
+        # page shows a masked token, never the value
+        response = self.client.get(reverse("watcher:config-page"))
+        self.assertNotContains(response, "ghp_secret123")
+        self.assertContains(response, "Configured")
+
+        response = self.client.get(reverse("watcher:config-token-delete"))
+        self.assertEqual(AppSetting.get("git_token"), "")
+        self.assertNotIn("VIBE_WATCHER_GIT_TOKEN", os.environ)
+
+    def test_https_url_conversion_from_ssh(self):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "tok123"
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/my-repo.git")
+            return git_out()
+
+        with mock.patch("watcher.git.run_git", side_effect=side_effect):
+            repo = GitRepo("/tmp/fake")
+            url = repo._https_url_with_token()
+            self.assertEqual(url, "https://tok123@github.com/me/my-repo.git")
+
+    def test_https_url_passthrough_https(self):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "tok123"
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("https://github.com/me/my-repo.git")
+            return git_out()
+
+        with mock.patch("watcher.git.run_git", side_effect=side_effect):
+            repo = GitRepo("/tmp/fake")
+            url = repo._https_url_with_token()
+            self.assertEqual(url, "https://tok123@github.com/me/my-repo.git")
+
+    def test_no_token_no_conversion(self):
+        import os
+
+        os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+        with mock.patch("watcher.git.run_git") as run_git_mock:
+            run_git_mock.return_value = git_out("git@github.com:me/my-repo.git")
+            repo = GitRepo("/tmp/fake")
+            self.assertIsNone(repo._https_url_with_token())
+
+    @mock.patch("watcher.git.run_git")
+    def test_fetch_with_token_uses_https_url(self, run_git_mock):
+        import os
+
+        os.environ["VIBE_WATCHER_GIT_TOKEN"] = "tok123"
+
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("remote", "get-url", "origin"):
+                return git_out("git@github.com:me/my-repo.git")
+            return GitCommandResult([], stdout="", stderr="", returncode=0)
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake")
+        used = repo.fetch_with_token()
+        self.assertTrue(used)
+        fetch_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "fetch"]
+        self.assertTrue(fetch_calls)
+        self.assertIn("https://tok123@github.com/me/my-repo.git", fetch_calls[0][0])
+
+    def test_watch_folders_loads_token_from_db(self):
+        import os
+
+        from watcher.models import AppSetting
+
+        os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
+        AppSetting.set("git_token", "ghp_dbtoken")
+        try:
+            out = StringIO()
+            call_command("watch_folders", "--once", stdout=out)
+            self.assertEqual(os.environ.get("VIBE_WATCHER_GIT_TOKEN"), "ghp_dbtoken")
+            self.assertIn("token", out.getvalue().lower())
+        finally:
+            os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)

@@ -1,0 +1,29 @@
+{% extends "watcher/base.html" %}
+{% block content %}
+<h2>Configuration</h2>
+
+<section>
+  <h3>Git token (HTTPS)</h3>
+  <p class="muted">
+    Used to fetch over HTTPS with authentication when your repos are cloned over SSH.
+    Your SSH remotes are left untouched — the watcher fetches
+    <code>https://&lt;token&gt;@github.com/…</code> directly without adding a second remote.
+    A GitHub token needs the <code>repo</code> (read) scope.
+  </p>
+  <form method="post" action="{% url 'watcher:config-token' %}">
+    {% csrf_token %}
+    <table>
+      <tr>
+        <th><label for="id_token">Token</label></th>
+        <td>
+          <input type="password" name="token" id="id_token" autocomplete="off"
+                 placeholder="{{ token_hint }}" style="width: 24rem;">
+          <p class="muted">{{ token_status }}</p>
+        </td>
+      </tr>
+    </table>
+    <button class="btn" type="submit">Save token</button>
+    <a class="btn" href="{% url 'watcher:config-token-delete' %}">Remove token</a>
+  </form>
+</section>
+{% endblock %}

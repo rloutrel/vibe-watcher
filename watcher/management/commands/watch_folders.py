@@ -37,6 +37,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        from watcher.models import AppSetting
+
+        token = AppSetting.get("git_token")
+        if token:
+            import os
+
+            os.environ["VIBE_WATCHER_GIT_TOKEN"] = token
+            self.stdout.write("Git token loaded from configuration.")
+
         restored = persist.restore_if_needed()
         if restored:
             self.stdout.write(

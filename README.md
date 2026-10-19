@@ -281,6 +281,21 @@ first option is the empty default (checked-out branch). A saved branch that
 no longer exists in the repo is kept as `(missing from repo)` so it stays
 visible and editable.
 
+## Configuration page (token)
+
+The **Config** link in the header opens a page to store a **git token**
+(persisted in the database, shown masked after saving). It answers a common
+setup: repos cloned over **SSH** while you want the watcher to fetch over
+**HTTPS with a token** (e.g. inside containers without your SSH keys).
+
+No second remote is needed and your repo config is untouched: the watcher
+converts the SSH remote on the fly and fetches
+`https://<token>@github.com/owner/repo.git` directly
+(`git@github.com:me/repo.git` → `https://tok123@github.com/me/repo.git`;
+HTTPS remotes simply get the token injected). The token is used for both
+the periodic fetch and auto-pull; without a token, everything falls back
+to plain SSH. GitHub tokens need the `repo` (read) scope.
+
 ## Notification id reuse
 
 - D-Bus notifications use `notify-send --print-id` and `-r <id>` so a repeated

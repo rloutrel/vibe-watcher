@@ -6,6 +6,9 @@ app_name = "watcher"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("config/", views.config_page, name="config-page"),
+    path("config/token/", views.config_token, name="config-token"),
+    path("config/token/delete/", views.config_token_delete, name="config-token-delete"),
     path("folders/new/", views.folder_create, name="folder-create"),
     path("folders/<int:pk>/edit/", views.folder_update, name="folder-update"),
     path("folders/<int:pk>/delete/", views.folder_delete, name="folder-delete"),

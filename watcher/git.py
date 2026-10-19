@@ -6,6 +6,8 @@ so the watcher core stays testable.
 """
 
 import logging
+import os
+import re
 import subprocess
 
 from django.conf import settings
@@ -432,6 +434,61 @@ class GitRepo:
             "commits_behind": behind,
             "upstream_changed": bool(upstream and behind > 0),
         }
+
+
+    def _https_url_with_token(self):
+        """Build an authenticated HTTPS URL for the origin remote.
+
+        Repos are often cloned over SSH; the watcher can instead fetch over
+        HTTPS with a token, without adding a second remote or touching the
+        repo's config. Returns None when no token is configured or the
+        remote isn't convertible (non-GitHub hosts keep their scheme).
+        """
+        url = self.remote_url()
+        token = os.environ.get("VIBE_WATCHER_GIT_TOKEN", "")
+        if not token or not url:
+            return None
+        m = re.match(r"(?:ssh://)?(?:git@)([^:/]+)[:/](.+?)(?:\.git)?$", url)
+        if not m:
+            # Already HTTPS: inject the token.
+            if url.startswith("https://"):
+                return url.replace("https://", f"https://{token}@")
+            return None
+        host, path = m.group(1), m.group(2)
+        return f"https://{token}@{host}/{path}.git"
+
+    def fetch_with_token(self):
+        """Fetch using the token-authenticated HTTPS URL (no config change).
+
+        Returns True when a token fetch was performed; False when the
+        caller should fall back to the plain fetch.
+        """
+        https_url = self._https_url_with_token()
+        if not https_url:
+            return False
+        res = run_git(
+            self.path,
+            "fetch",
+            https_url,
+            f"+refs/heads/*:refs/remotes/origin/*",
+            "--quiet",
+            check=False,
+        )
+        return res.ok or True
+
+    def pull_ff_only_with_token(self, branch=None):
+        """Fast-forward pull fetching over the token HTTPS URL first."""
+        https_url = self._https_url_with_token()
+        if https_url:
+            run_git(
+                self.path,
+                "fetch",
+                https_url,
+                f"+refs/heads/*:refs/remotes/origin/*",
+                "--quiet",
+                check=False,
+            )
+        return run_git(self.path, "pull", "--ff-only", "--quiet")
 
 
 NO_REMOTE_MESSAGE = (

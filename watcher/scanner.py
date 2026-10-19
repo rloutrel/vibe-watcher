@@ -65,7 +65,8 @@ def scan_folder(folder, repo=None, backend=None):
 
     if getattr(settings, "WATCHER_FETCH_BEFORE_SCAN", True):
         try:
-            repo.fetch()
+            if not repo.fetch_with_token():
+                repo.fetch()
         except GitError as exc:
             logger.warning(
                 "fetch failed, comparing against existing refs",
