@@ -2074,3 +2074,29 @@ class JsonLoggingTests(TestCase, RepoFixture):
         self.assertEqual(
             set(payload.keys()), {"ts", "level", "logger", "message"}
         )
+
+
+class SafeDirectoryTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.subprocess")
+    def test_git_invocations_carry_safe_directory_config(self, subprocess_mod):
+        subprocess_mod.run.return_value = mock.Mock(
+            returncode=0, stdout="main\n", stderr=""
+        )
+        run_git("/tmp/some-repo", "rev-parse", "HEAD")
+        kwargs = subprocess_mod.run.call_args[1]
+        env = kwargs["env"]
+        self.assertEqual(env["GIT_CONFIG_COUNT"], "1")
+        self.assertEqual(env["GIT_CONFIG_KEY_0"], "safe.directory")
+        self.assertEqual(env["GIT_CONFIG_VALUE_0"], "*")
+
+    def test_not_a_repo_diag_includes_git_stderr(self):
+        import tempfile
+
+        plain = tempfile.mkdtemp()
+        repo = GitRepo(plain)
+        with self.assertRaises(GitError) as ctx:
+            repo.observe()
+        stderr = ctx.exception.stderr
+        self.assertIn(".git present: False", stderr)
+        self.assertIn("git said:", stderr)
+        self.assertIn("VIBE_WATCHER_PATH_MAP:", stderr)

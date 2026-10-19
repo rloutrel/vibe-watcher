@@ -98,12 +98,20 @@ def run_git(repo_path, *args, check=True):
     """
     cmd = ["git", "-C", str(repo_path), *[str(a) for a in args]]
     timeout = getattr(settings, "WATCHER_GIT_TIMEOUT", 120)
+    env = dict(os.environ)
+    # Containers run the watcher as root while checkouts belong to the host
+    # user; git >=2.35 refuses such repos ("dubuous ownership"). The watcher
+    # is read-mostly (fetch / ff-only pull), so allow any ownership.
+    env.setdefault("GIT_CONFIG_COUNT", "1")
+    env.setdefault("GIT_CONFIG_KEY_0", "safe.directory")
+    env.setdefault("GIT_CONFIG_VALUE_0", "*")
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise GitError(f"git {' '.join(args)} timed out after {timeout}s") from exc
@@ -342,12 +350,19 @@ class GitRepo:
 
             exists = os.path.exists(self.path)
             isdir = os.path.isdir(self.path)
+            git_err = ""
+            git_dir = os.path.join(self.path, ".git")
+            has_git_dir = os.path.exists(git_dir)
+            probe = run_git(self.path, "rev-parse", "--git-dir", check=False)
+            if probe.returncode != 0:
+                git_err = (probe.stderr or "").strip()
             raise GitError(
                 "not a git repository",
                 stderr=(
                     f"registered path: {self.registered_path}\n"
                     f"resolved path:   {self.path}\n"
-                    f"exists: {exists}, is directory: {isdir}\n"
+                    f"exists: {exists}, is directory: {isdir}, .git present: {has_git_dir}\n"
+                    f"git said: {git_err or '(no output)'}\n"
                     f"VIBE_WATCHER_PATH_MAP: {os.environ.get('VIBE_WATCHER_PATH_MAP') or '(unset)'}\n"
                     f"VIBE_WATCHER_PROJECTS_BASE: {os.environ.get('VIBE_WATCHER_PROJECTS_BASE') or '(unset)'}"
                 ),
