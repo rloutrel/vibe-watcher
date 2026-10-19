@@ -119,6 +119,25 @@ def scan_folder(folder, repo=None, backend=None):
     if changed:
         head = state["head"]
         notification_key = f"f{folder.id}:{state['branch']}:{head}"
+        # Apply updates (pull + post-pull command) whenever the folder is
+        # behind — even when the change was already notified before: a
+        # previously failed pull (dirty tree, offline...) must retry, not
+        # leave the folder stuck behind forever.
+        action_result = apply_updates(folder, repo, state)
+        if action_result["pulled"]:
+            record_event(
+                "change",
+                f"{folder.name}: auto-pulled {action_result['pulled'] and 'to remote head' or ''}".rstrip(),
+                folder=folder,
+                detail={
+                    "head": head,
+                    "retried": already_notified(folder, head),
+                    "post_pull_command": action_result["command"],
+                    "command_ok": action_result["command_ok"],
+                    "command_output": action_result["command_output"][-500:],
+                },
+            )
+
         if already_notified(folder, head):
             logger.info(
                 "change already notified, skipping notification",
@@ -131,7 +150,6 @@ def scan_folder(folder, repo=None, backend=None):
                 detail={"head": head, "dup": True},
             )
         else:
-            action_result = apply_updates(folder, repo, state)
             if action_result["pulled"] and action_result["command_ok"]:
                 follow_up = "Pulled and restarted."
             elif action_result["pulled"]:

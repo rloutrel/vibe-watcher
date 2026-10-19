@@ -2254,3 +2254,52 @@ class ConfigBackLinkTests(TestCase, RepoFixture):
         html = response.content.decode()
         self.assertIn('href="%s"' % reverse("watcher:index"), html)
         self.assertIn("←", html)
+
+
+class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):
+    """A change detected twice must still pull the second time.
+
+    Regression: the pull used to run only on the first (notifying) pass,
+    so a failed first pull left the folder stuck behind forever, logging
+    'already notified' on every scan.
+    """
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_pull_runs_even_when_already_notified(self, GitRepoMock, run_cmd_mock):
+        from watcher.models import NotifiedCommit
+
+        fake = FakeRepo(observe_result(behind=2, head="cafe99", branch="main"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        run_cmd_mock.return_value = (True, "ok", "")
+        folder = self.make_folder(auto_pull=True, post_pull_command="docker compose up -d")
+
+        # first scan: notifies, marks notified
+        scanner.scan_folder(folder, backend=FakeBackend())
+        self.assertTrue(
+            NotifiedCommit.objects.filter(folder=folder, commit_hash="cafe99").exists()
+        )
+
+        # second scan of the same commit (e.g. first pull had failed):
+        # pull + post-pull command must run again
+        fake.pull_ff_only.reset_mock()
+        run_cmd_mock.reset_mock()
+        scanner.scan_folder(folder, backend=FakeBackend())
+        fake.pull_ff_only.assert_called_once()
+        run_cmd_mock.assert_called_once()
+        event = WatcherEvent.objects.filter(
+            message__contains="auto-pulled"
+        ).first()
+        self.assertIsNotNone(event)
+        self.assertTrue(event.detail["retried"])
+
+    @mock.patch("watcher.actions.run_post_pull_command")
+    @mock.patch("watcher.scanner.GitRepo")
+    def test_no_pull_when_folder_current(self, GitRepoMock, run_cmd_mock):
+        fake = FakeRepo(observe_result(behind=0, head="cafe99"))
+        fake.pull_ff_only = mock.Mock()
+        GitRepoMock.return_value = fake
+        folder = self.make_folder(auto_pull=True)
+        scanner.scan_folder(folder, backend=FakeBackend())
+        fake.pull_ff_only.assert_not_called()
