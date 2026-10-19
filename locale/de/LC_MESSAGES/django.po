@@ -178,3 +178,6 @@ msgstr "Token"
 msgid "Your username and password didn't match. Please try again."
 msgstr ""
 "Benutzername und Passwort stimmen nicht überein. Bitte erneut versuchen."
+
+msgid "Back"
+msgstr "Zurück"

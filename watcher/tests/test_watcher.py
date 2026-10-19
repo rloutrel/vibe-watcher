@@ -2240,3 +2240,17 @@ class ThemeI18nTests(TestCase, RepoFixture):
         self.assertIn("Projet", html)
         self.assertIn("Intervalle de vérification", html)
         self.assertIn("Enregistrer", html)
+
+
+class ConfigBackLinkTests(TestCase, RepoFixture):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("back", password="pw")
+        self.client.login(username="back", password="pw")
+
+    def test_config_page_has_back_link(self):
+        response = self.client.get(reverse("watcher:config-page"))
+        html = response.content.decode()
+        self.assertIn('href="%s"' % reverse("watcher:index"), html)
+        self.assertIn("←", html)

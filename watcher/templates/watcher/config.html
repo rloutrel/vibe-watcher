@@ -1,6 +1,10 @@
 {% extends "watcher/base.html" %}
 {% load i18n %}
 {% block content %}
+<div class="page-head">
+  <a class="btn" href="{% url 'watcher:index' %}">← {% translate "Back" %}</a>
+</div>
+
 <h2>{% translate "Configuration" %}</h2>
 
 <section>
