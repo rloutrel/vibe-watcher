@@ -16,8 +16,10 @@ services:
       POSTGRES_PASSWORD: vibewatcher
       POSTGRES_HOST: db
       WATCHER_NOTIFY_BACKEND: "none"
+      VIBE_WATCHER_PATH_MAP: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects"
     volumes:
       - ..:/app
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects
     depends_on:
       db:
         condition: service_healthy
@@ -38,10 +40,10 @@ services:
       POSTGRES_PASSWORD: vibewatcher
       POSTGRES_HOST: db
       WATCHER_NOTIFY_BACKEND: "none"
-      VIBE_WATCHER_PATH_MAP: "${HOME}:/home/hostuser"
+      VIBE_WATCHER_PATH_MAP: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects"
     volumes:
       - ..:/app
-      - ${HOME}:/home/hostuser
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:/projects
     depends_on:
       db:
         condition: service_healthy
