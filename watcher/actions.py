@@ -9,7 +9,7 @@ import subprocess
 
 from django.conf import settings
 
-from .git import GitError
+from .git import GitError, map_path
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ def run_post_pull_command(folder, command):
     argv = ["sh", "-c", command]
     try:
         proc = subprocess.run(
-            argv, cwd=folder.path, capture_output=True, text=True, timeout=timeout
+            argv, cwd=map_path(folder.path), capture_output=True, text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired:
         return False, f"post-pull command timed out after {timeout}s", ""
@@ -143,7 +144,7 @@ def _run_docker(args, cwd):
     """Seam for tests: actually invokes docker when unmocked."""
     try:
         return subprocess.run(
-            ["docker", *args], cwd=cwd, capture_output=True, text=True,
+            ["docker", *args], cwd=map_path(cwd), capture_output=True, text=True,
             timeout=60,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):

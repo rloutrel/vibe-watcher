@@ -1472,3 +1472,60 @@ class EmptyRepoTests(TestCase, RepoFixture):
             run_git("/tmp/definitely-not-a-repo", "rev-parse", "HEAD")
         self.assertIn("code 128", str(ctx.exception))
         self.assertIn("fatal", str(ctx.exception).lower())
+
+
+class PathMapTests(TestCase, RepoFixture):
+    def tearDown(self):
+        import os
+
+        os.environ.pop("VIBE_WATCHER_PATH_MAP", None)
+        super().tearDown()
+
+    def test_map_path_translates_prefixes(self):
+        from watcher.git import map_path
+        import os
+
+        os.environ["VIBE_WATCHER_PATH_MAP"] = "/home/romain:/home/hostuser"
+        self.assertEqual(map_path("/home/romain/Basil/repo"), "/home/hostuser/Basil/repo")
+        self.assertEqual(map_path("/home/romain"), "/home/hostuser")
+        self.assertEqual(map_path("/etc/other"), "/etc/other")
+
+    def test_map_path_longest_prefix_wins(self):
+        from watcher.git import map_path
+        import os
+
+        os.environ["VIBE_WATCHER_PATH_MAP"] = (
+            "/home/romain:/home/hostuser,/home/romain/Basil:/data/basil"
+        )
+        self.assertEqual(map_path("/home/romain/Basil/repo"), "/data/basil/repo")
+        self.assertEqual(map_path("/home/romain/other"), "/home/hostuser/other")
+
+    def test_map_path_disabled(self):
+        from watcher.git import map_path
+        import os
+
+        os.environ.pop("VIBE_WATCHER_PATH_MAP", None)
+        self.assertEqual(map_path("/home/romain/repo"), "/home/romain/repo")
+
+    @mock.patch("watcher.git.run_git")
+    def test_gitrepo_maps_path(self, run_git_mock):
+        import os
+
+        os.environ["VIBE_WATCHER_PATH_MAP"] = "/home/romain:/home/hostuser"
+        run_git_mock.return_value = git_out("")
+        GitRepo("/home/romain/Basil/repo").status_is_clean()
+        self.assertEqual(run_git_mock.call_args[0][0], "/home/hostuser/Basil/repo")
+
+    @mock.patch("watcher.actions.subprocess")
+    def test_post_pull_command_runs_in_mapped_path(self, subprocess_mod):
+        import os
+
+        from watcher.actions import run_post_pull_command
+
+        os.environ["VIBE_WATCHER_PATH_MAP"] = "/home/romain:/home/hostuser"
+        subprocess_mod.run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+        folder = self.make_folder(path="/home/romain/Basil/repo")
+        run_post_pull_command(folder, "docker compose up -d")
+        self.assertEqual(
+            subprocess_mod.run.call_args[1]["cwd"], "/home/hostuser/Basil/repo"
+        )

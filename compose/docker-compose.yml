@@ -38,9 +38,10 @@ services:
       POSTGRES_PASSWORD: vibewatcher
       POSTGRES_HOST: db
       WATCHER_NOTIFY_BACKEND: "none"
+      VIBE_WATCHER_PATH_MAP: "${HOME}:/home/hostuser"
     volumes:
       - ..:/app
-      - ${HOME}:/home/hostuser:ro
+      - ${HOME}:/home/hostuser
     depends_on:
       db:
         condition: service_healthy

@@ -60,8 +60,13 @@ Runs three services: `web` (Django dev server published on host port
 **28888** — override with `VIBE_WATCHER_WEB_PORT` in `compose/.env`),
 `watcher`
 (`manage.py watch_folders`), and `db` (PostgreSQL 16). The watcher mounts your
-home directory read-only at `/home/hostuser` so you can point folders at
-`/home/hostuser/code/...`. Desktop notifications are disabled by default in
+home directory at `/home/hostuser`. **Path mapping**: you register folders
+with your real host paths (`/home/romain/Basil/my-repo`); the watcher
+translates them to its container view automatically via
+`VIBE_WATCHER_PATH_MAP` (set in the compose file as
+`$HOME:/home/hostuser`). Without that mapping, every scan would fail with
+"not a git repository" because the host path doesn't exist inside the
+container. Desktop notifications are disabled by default in
 compose (`WATCHER_NOTIFY_BACKEND=none`) because containers have no session bus.
 
 Create the admin user (first-time setup):
@@ -89,6 +94,7 @@ All configuration is environment-driven, both for compose and the systemd
 | `WATCHER_NOTIFY_BACKEND` | `dbus` | `dbus` (notify-send) or `none` |
 | `WATCHER_NOTIFY_APP_NAME` | `vibe-watcher` | `-a` app name passed to notify-send |
 | `WATCHER_NOTIFY_SEND_ARGS` | *(empty)* | Extra args passed verbatim to notify-send (e.g. `--icon=git --transient`) |
+| `VIBE_WATCHER_PATH_MAP` | unset | Comma-separated `host_prefix:container_prefix` pairs translating registered folder paths into the watcher's filesystem view (compose sets `$HOME:/home/hostuser`) |
 | `VIBE_WATCHER_FETCH_BEFORE_SCAN` | `1` | Run `git fetch --all` before each scan so remote changes are actually detected |
 | `VIBE_WATCHER_CONFIG_PATH` | unset | On-disk config copy the service rewrites on every folder change and restores from at startup when the DB is empty |
 | `WATCHER_HEARTBEAT_STALE_AFTER` | `180` | Seconds after which the UI flags the watcher as stale |

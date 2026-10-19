@@ -35,6 +35,32 @@ class GitCommandResult:
         return [line for line in self.stdout.splitlines() if line.strip()]
 
 
+def map_path(path):
+    """Translate a host path into the watcher process's view.
+
+    In containerized deployments the host home is mounted at a different
+    location (e.g. /home/romain -> /home/hostuser). VIBE_WATCHER_PATH_MAP is
+    a comma-separated list of host_prefix:container_prefix pairs, applied
+    longest-prefix-first.
+    """
+    import os
+
+    mapping = os.environ.get("VIBE_WATCHER_PATH_MAP", "")
+    if not mapping:
+        return path
+    pairs = []
+    for item in mapping.split(","):
+        item = item.strip()
+        if not item or ":" not in item:
+            continue
+        host_part, _, container_part = item.partition(":")
+        pairs.append((host_part.strip(), container_part.strip()))
+    for host_part, container_part in sorted(pairs, key=lambda p: -len(p[0])):
+        if path == host_part or path.startswith(host_part.rstrip("/") + "/"):
+            return container_part + path[len(host_part):]
+    return path
+
+
 def run_git(repo_path, *args, check=True):
     """Run a git command inside ``repo_path`` and return a GitCommandResult.
 
@@ -71,7 +97,7 @@ class GitRepo:
     """Read-only observation helpers for a local git checkout."""
 
     def __init__(self, path):
-        self.path = path
+        self.path = map_path(path)
 
     def _list_branches_cmd(self, extra_args):
         """Run ``git branch <extra_args>`` and return clean short names."""
