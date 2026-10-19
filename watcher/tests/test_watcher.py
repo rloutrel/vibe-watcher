@@ -2330,3 +2330,41 @@ class PullDisabledVisibilityTests(TestCase, RepoFixture):
         self.assertIsNotNone(event)
         self.assertEqual(event.kind, "error")
         self.assertIn("not a fast-forward", event.message)
+
+
+class HttpsPullTests(TestCase, RepoFixture):
+    @mock.patch("watcher.git.run_git")
+    def test_pull_merges_fetched_refs_not_ssh_remote(self, run_git_mock):
+        # In containers without SSH keys, `git pull` would fail on the SSH
+        # remote; the pull must merge the already-fetched origin/* refs.
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                return git_out("origin/main")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake")
+        repo.pull_ff_only_with_token(branch="main")
+        merge_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "merge"]
+        self.assertEqual(len(merge_calls), 1)
+        self.assertEqual(
+            merge_calls[0][0][1:], ("merge", "--ff-only", "origin/main")
+        )
+        # no `pull` invocation at all
+        pull_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "pull"]
+        self.assertEqual(len(pull_calls), 0)
+
+    @mock.patch("watcher.git.run_git")
+    def test_pull_without_branch_uses_upstream(self, run_git_mock):
+        def side_effect(*args, **kwargs):
+            cmd = args[1:]
+            if cmd == ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                return git_out("origin/main")
+            return git_out()
+
+        run_git_mock.side_effect = side_effect
+        repo = GitRepo("/tmp/fake")
+        repo.pull_ff_only_with_token()
+        merge_calls = [c for c in run_git_mock.call_args_list if c[0][1] == "merge"]
+        self.assertEqual(merge_calls[0][0][1:], ("merge", "--ff-only", "origin/main"))

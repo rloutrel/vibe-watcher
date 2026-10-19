@@ -569,9 +569,21 @@ class GitRepo:
         return True
 
     def pull_ff_only_with_token(self, branch=None):
-        """Fast-forward pull, anonymous HTTPS fetch first, token fallback."""
+        """Fast-forward pull over HTTPS (no SSH keys needed).
+
+        Fetches the HTTPS remote URL into origin/* refs first (anonymous,
+        token retry for private repos), then merges the fetched state with
+        merge --ff-only — avoiding `git pull`, which would contact the
+        configured (often SSH) remote that containers can't authenticate
+        against.
+        """
         self.fetch_with_token()
-        return run_git(self.path, "pull", "--ff-only", "--quiet")
+        if branch:
+            ref = f"origin/{branch}"
+        else:
+            up = self.upstream_name()
+            ref = up if up else "origin/HEAD"
+        return run_git(self.path, "merge", "--ff-only", ref)
 
 
 NO_REMOTE_MESSAGE = (
