@@ -22,13 +22,30 @@ watcher heartbeat indicator that flags a stale or stopped watcher.
 | Compose setup | `compose/docker-compose.yml` |
 | Tests | `watcher/tests/` |
 
-## Quickstart (local)
+## Quickstart (recommended: systemd user service)
+
+Running the watcher as your own user — not in Docker — is the best setup
+for a personal machine: native paths (no mount translation), desktop
+notifications work out of the box, and `docker compose` runs as **you**.
 
 ```bash
+git clone https://github.com/rloutrel/vibe-watcher ~/vibe-watcher
+cd ~/vibe-watcher
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
+./packaging/systemd/install.sh --user
+```
+
+The web UI runs with `python manage.py runserver` (or any WSGI server)
+in another terminal; the watcher itself is the systemd user service.
+Adjust `~/.config/vibe-watcher/env` (projects base, notification
+backend) — see the packaging env example.
+
+A plain local run (no service) also works:
+
+```bash
 python manage.py runserver          # terminal 1: web UI at http://127.0.0.1:8000
 python manage.py watch_folders      # terminal 2: watcher loop
 ```
@@ -61,7 +78,13 @@ can optionally select a specific **branch to watch**: the branch picker lists
 everything available in the repo (local and remote, via `git branch -a`);
 leave it empty to watch the currently checked-out branch.
 
-## Compose setup
+## Compose setup (optional)
+
+Works, but for a personal desktop machine the systemd user service above
+is simpler and safer: compose needs the Docker socket mounted (root-level
+access), desktop notifications are unavailable, and paths/mounts add
+moving parts. Prefer compose only for headless servers or when you want
+the stack fully containerized.
 
 ```bash
 cd compose

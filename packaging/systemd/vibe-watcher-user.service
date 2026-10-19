@@ -13,6 +13,7 @@ After=network-online.target
 
 [Service]
 Type=simple
+Environment=VIBE_WATCHER_CONFIG_PATH=%h/.local/share/vibe-watcher/watcher-config.json
 ExecStart=/usr/bin/env python3 %h/vibe-watcher/manage.py watch_folders
 WorkingDirectory=%h/vibe-watcher
 EnvironmentFile=%h/.config/vibe-watcher/env
