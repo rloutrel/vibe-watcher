@@ -33,9 +33,11 @@ def watcher_status():
     }
 
 
-@login_required
-def index(request):
+def _index_context(add_form=None, edit_forms=None):
+    """Context for the main page: watcher state, folder rows, events,
+    and the inlined folder/token configuration (accordion)."""
     from .actions import docker_running
+    from .git import code_version
 
     folders = list(Folder.objects.order_by("name"))
     latest_by_folder = {}
@@ -52,19 +54,27 @@ def index(request):
         (folder, latest_by_folder.get(folder.id), stack_down[folder.id])
         for folder in folders
     ]
-    events = WatcherEvent.objects.select_related("folder")[:50]
-    from .git import code_version
+    token, token_status = _token_masked()
+    if add_form is None:
+        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
+    if edit_forms is None:
+        edit_forms = []
+    return {
+        "rows": rows,
+        "events": WatcherEvent.objects.select_related("folder")[:50],
+        "watcher": watcher_status(),
+        "code_version": code_version(),
+        "token_hint": "ghp_••••••••••••••••••••" if token else "",
+        "token_status": token_status,
+        "folders": folders,
+        "add_form": add_form,
+        "edit_forms": edit_forms,
+    }
 
-    return render(
-        request,
-        "watcher/index.html",
-        {
-            "rows": rows,
-            "events": events,
-            "watcher": watcher_status(),
-            "code_version": code_version(),
-        },
-    )
+
+@login_required
+def index(request):
+    return render(request, "watcher/index.html", _index_context())
 
 
 @login_required
@@ -147,11 +157,11 @@ def folder_create(request):
         form = FolderForm(request.POST)
         if form.is_valid():
             form.save()
-            return redirect("watcher:config-page")
+            return redirect("watcher:index")
         add_form = form
     else:
         add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
-    return _config_response(request, add_form=add_form)
+    return render(request, "watcher/index.html", _index_context(add_form=add_form))
 
 
 @login_required
@@ -165,11 +175,11 @@ def folder_update(request, pk):
                 # empty password field = keep the existing token
                 folder.git_token = get_object_or_404(Folder, pk=pk).git_token
             folder.save()
-            return redirect("watcher:config-page")
+            return redirect("watcher:index")
         edit_forms = [(folder, form)]
     else:
         edit_forms = [(folder, FolderForm(instance=folder))]
-    return _config_response(request, edit_forms=edit_forms)
+    return render(request, "watcher/index.html", _index_context(edit_forms=edit_forms))
 
 
 @login_required
@@ -344,31 +354,7 @@ def _token_masked():
 
 @login_required
 def config_page(request):
-    return _config_response(request)
-
-
-def _config_response(request, add_form=None, edit_forms=None):
-    """Render the config page with all folder forms inlined (accordion).
-
-    ``add_form`` / ``edit_forms`` carry invalidated forms so their errors
-    render inside the accordion that was submitted.
-    """
-    token, status = _token_masked()
-    if add_form is None:
-        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
-    if edit_forms is None:
-        edit_forms = []
-    return render(
-        request,
-        "watcher/config.html",
-        {
-            "token_hint": "ghp_•••••••••••••••••••" if token else "",
-            "token_status": status,
-            "folders": Folder.objects.order_by("name"),
-            "add_form": add_form,
-            "edit_forms": edit_forms,
-        },
-    )
+    return redirect("watcher:index")
 
 
 @login_required
@@ -380,7 +366,7 @@ def config_token(request):
     if token:
         AppSetting.set("git_token", token)
         os.environ["VIBE_WATCHER_GIT_TOKEN"] = token
-    return redirect("watcher:config-page")
+    return redirect("watcher:index")
 
 
 @login_required
@@ -389,7 +375,7 @@ def config_token_delete(request):
 
     AppSetting.objects.filter(key="git_token").delete()
     os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
-    return redirect("watcher:config-page")
+    return redirect("watcher:index")
 
 
 @login_required
