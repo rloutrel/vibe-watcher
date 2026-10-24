@@ -1,0 +1,80 @@
+name: vibe-watcher
+
+# How this works:
+#  - Your projects are mounted at the SAME path inside the containers as on
+#    the host (VIBE_WATCHER_PROJECTS_DIR, default $HOME). Identical paths
+#    mean no PATH_MAP translation, and docker compose commands the watcher
+#    runs inside the container work on the host daemon with correct paths.
+#  - The watcher mounts the Docker socket so `docker compose up -d` in a
+#    project spawns real host containers.
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "${VIBE_WATCHER_WEB_PORT:-28888}:8000"
+    environment:
+      VIBE_WATCHER_DEBUG: "1"
+      VIBE_WATCHER_ALLOWED_HOSTS: "*"
+      VIBE_WATCHER_DB: "postgres"
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+      POSTGRES_HOST: db
+      WATCHER_NOTIFY_BACKEND: "none"
+      VIBE_WATCHER_PROJECTS_BASE: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}"
+    volumes:
+      - ..:/app
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --no-cache-dir -q -r requirements.txt &&
+             python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  watcher:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      VIBE_WATCHER_DEBUG: "0"
+      VIBE_WATCHER_DB: "postgres"
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+      POSTGRES_HOST: db
+      WATCHER_NOTIFY_BACKEND: "none"
+      VIBE_WATCHER_PROJECTS_BASE: "${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}"
+    volumes:
+      - ..:/app
+      - ${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}:${VIBE_WATCHER_PROJECTS_DIR:-${HOME}}
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --no-cache-dir -q -r requirements.txt &&
+             python manage.py migrate --noinput &&
+             python manage.py watch_folders"
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: vibewatcher
+      POSTGRES_USER: vibewatcher
+      POSTGRES_PASSWORD: vibewatcher
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibewatcher"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

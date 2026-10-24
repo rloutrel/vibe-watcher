@@ -1,0 +1,26 @@
+# vibe-watcher systemd unit (user mode)
+#
+# Install with: ./packaging/systemd/install.sh --user
+# This is the RECOMMENDED mode for desktop notifications: the unit runs
+# inside your session, so org.freedesktop.Notifications on the D-Bus session
+# bus is reachable without any DBUS_SESSION_BUS_ADDRESS gymnastics.
+
+[Unit]
+Description=vibe-watcher: local git folder watcher (user)
+Documentation=https://github.com/rloutrel/vibe-watcher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=VIBE_WATCHER_CONFIG_PATH=%h/.local/share/vibe-watcher/watcher-config.json
+ExecStart=/usr/bin/env python3 %h/vibe-watcher/manage.py watch_folders
+WorkingDirectory=%h/vibe-watcher
+EnvironmentFile=%h/.config/vibe-watcher/env
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

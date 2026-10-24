@@ -1,0 +1,148 @@
+{% extends "watcher/base.html" %}
+{% load i18n %}
+{% block content %}
+<section>
+  <h2>{% translate "Watcher status" %}</h2>
+  <p>
+    {% if watcher.state == "ok" %}
+      <span class="badge ok">{% translate "Running" %}</span>
+    {% elif watcher.state == "stale" %}
+      <span class="badge stale">Stale heartbeat ({{ watcher.age_seconds }}s old) — {% translate "watcher stopped or hung?" %}</span>
+    {% else %}
+      <span class="badge never-run">{% translate "Never run" %}</span>
+    {% endif %}
+    {% if watcher.status and watcher.status.heartbeat %}
+      <span class="muted">{% translate "last heartbeat" %} {{ watcher.status.heartbeat|timesince }} {% translate "ago" %},
+      pid {{ watcher.status.pid|default:"–" }}, {% translate "iteration" %} {{ watcher.status.iteration }}</span>
+    {% endif %}
+  </p>
+  {% if watcher.status and watcher.status.last_error %}
+    <p class="muted">{% translate "Last error" %}: {{ watcher.status.last_error }}</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{% translate "Folders" %} <a class="btn" href="{% url 'watcher:folder-create' %}">{% translate "Add folder" %}</a></h2>
+  <table>
+    <tr><th>ON/OFF</th><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th>{% translate "Latest state" %}</th><th>{% translate "Actions" %}</th></tr>
+    {% for folder, snapshot, can_start in rows %}
+      <tr data-folder-row="{{ folder.pk }}">
+        <td>
+          <form method="post" action="{% url 'watcher:folder-toggle' folder.pk %}" class="inline toggle-form">
+            {% csrf_token %}
+            <button type="submit"
+                    class="switch {% if folder.enabled %}on{% else %}off{% endif %}"
+                    title="{% if folder.enabled %}Disable watching{% else %}Enable watching{% endif %}">
+              <span class="knob"></span>
+            </button>
+          </form>
+        </td>
+        <td>{{ folder.name }}{% if not folder.enabled %} <span class="muted">({% translate "disabled" %})</span>{% endif %}</td>
+        <td><code>{{ folder.path }}</code></td>
+        <td>{% if folder.branch %}{{ folder.branch }}{% else %}<span class="muted">{% translate "(checked-out)" %}</span>{% endif %}</td>
+        <td>{{ folder.poll_interval }}s</td>
+        <td>
+          {% if snapshot %}
+            <span class="badge {% if snapshot.state == 'error' %}stale{% elif snapshot.state == 'empty' %}never-run{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}">{{ snapshot.state }}</span>
+            {% if snapshot.upstream %}<span class="muted">{{ snapshot.commits_behind }} behind / {{ snapshot.commits_ahead }} ahead</span>{% endif %}
+          {% else %}
+            <span class="muted">{% translate "not scanned yet" %}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if can_start %}
+            <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
+              {% csrf_token %}
+              <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
+            </form>
+          {% endif %}
+          <form method="post" action="{% url 'watcher:folder-check-now' folder.pk %}" class="inline check-form">
+            {% csrf_token %}
+            <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
+          </form>
+          <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="{% translate 'Edit' %}">✏️</a>
+          <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
+            {% csrf_token %}
+            <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
+          </form>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7" class="muted">{% translate "No folders yet." %}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2>{% translate "Backup" %}</h2>
+  <p class="muted">{% translate "Save the folder configuration to restore it after a reinstall or database loss." %}</p>
+  <a class="btn" href="{% url 'watcher:folders-export' %}" download="vibe-watcher-config.json">{% translate "⬇ Export config" %}</a>
+  <form method="post" action="{% url 'watcher:folders-import' %}" enctype="multipart/form-data" class="inline">
+    {% csrf_token %}
+    <input type="file" name="config" accept="application/json" required>
+    <button class="btn" type="submit">{% translate "⬆ Import config" %}</button>
+  </form>
+</section>
+
+<section>
+  <h2>{% translate "Recent events" %}</h2>
+  <table>
+    <tr><th>{% translate "When" %}</th><th>{% translate "Kind" %}</th><th>{% translate "Folder" %}</th><th>{% translate "Message" %}</th></tr>
+    {% for event in events %}
+      <tr>
+        <td>{% translate "ago" %} {{ event.created_at|timesince }}</td>
+        <td>{{ event.kind }}</td>
+        <td>{{ event.folder.name|default:"–" }}</td>
+        <td>{{ event.message }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="muted">{% translate "No events yet. The watcher writes events here as it polls." %}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<p class="muted" style="font-size:.75rem; margin-top:2rem;">vibe-watcher @ {{ code_version }}</p>
+
+<script>
+(function () {
+  document.querySelectorAll(".toggle-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      fetch(form.action, {
+        method: "POST",
+        headers: {"X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value},
+        body: new FormData()
+      }).then(function (r) {
+        if (r.ok) { window.location.reload(); }
+      });
+    });
+  });
+  document.querySelectorAll(".check-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var btn = form.querySelector(".check-btn");
+      btn.style.opacity = "0.4";
+      btn.style.transition = "transform .8s linear";
+      btn.style.transform = "rotate(360deg)";
+      fetch(form.action, {
+        method: "POST",
+        headers: {"X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value},
+        body: new FormData()
+      }).then(function (r) {
+        if (r.ok) { window.location.reload(); }
+      }).finally(function () {
+        btn.style.opacity = "";
+        btn.style.transform = "";
+      });
+    });
+  });
+  document.querySelectorAll(".delete-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      if (!confirm("{% translate "Delete this folder from the watcher?" %}")) {
+        ev.preventDefault();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}
