@@ -147,10 +147,11 @@ def folder_create(request):
         form = FolderForm(request.POST)
         if form.is_valid():
             form.save()
-            return redirect("watcher:index")
+            return redirect("watcher:config-page")
+        add_form = form
     else:
-        form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
-    return render(request, "watcher/folder_form.html", {"form": form})
+        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
+    return _config_response(request, add_form=add_form)
 
 
 @login_required
@@ -164,14 +165,11 @@ def folder_update(request, pk):
                 # empty password field = keep the existing token
                 folder.git_token = get_object_or_404(Folder, pk=pk).git_token
             folder.save()
-            return redirect("watcher:index")
+            return redirect("watcher:config-page")
+        edit_forms = [(folder, form)]
     else:
-        form = FolderForm(instance=folder)
-    return render(
-        request,
-        "watcher/folder_form.html",
-        {"form": form, "folder": folder},
-    )
+        edit_forms = [(folder, FolderForm(instance=folder))]
+    return _config_response(request, edit_forms=edit_forms)
 
 
 @login_required
@@ -346,13 +344,29 @@ def _token_masked():
 
 @login_required
 def config_page(request):
+    return _config_response(request)
+
+
+def _config_response(request, add_form=None, edit_forms=None):
+    """Render the config page with all folder forms inlined (accordion).
+
+    ``add_form`` / ``edit_forms`` carry invalidated forms so their errors
+    render inside the accordion that was submitted.
+    """
     token, status = _token_masked()
+    if add_form is None:
+        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
+    if edit_forms is None:
+        edit_forms = []
     return render(
         request,
         "watcher/config.html",
         {
-            "token_hint": "ghp_••••••••••••••••••••" if token else "",
+            "token_hint": "ghp_•••••••••••••••••••" if token else "",
             "token_status": status,
+            "folders": Folder.objects.order_by("name"),
+            "add_form": add_form,
+            "edit_forms": edit_forms,
         },
     )
 

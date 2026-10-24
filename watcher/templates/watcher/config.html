@@ -8,27 +8,250 @@
 <h2>{% translate "Configuration" %}</h2>
 
 <section>
-  <h3>{% translate "Git token (HTTPS)" %}</h3>
-  <p class="muted">
-    Used to fetch over HTTPS with authentication when your repos are cloned over SSH.
-    Your SSH remotes are left untouched — the watcher fetches
-    <code>https://&lt;token&gt;@github.com/…</code> directly without adding a second remote.
-    A GitHub token needs the <code>repo</code> (read) scope.
-  </p>
-  <form method="post" action="{% url 'watcher:config-token' %}">
-    {% csrf_token %}
-    <table>
-      <tr>
-        <th><label for="id_token">{% translate "Token" %}</label></th>
-        <td>
-          <input type="password" name="token" id="id_token" autocomplete="off"
-                 placeholder="{{ token_hint }}" style="width: 24rem;">
-          <p class="muted">{{ token_status }}</p>
-        </td>
-      </tr>
-    </table>
-    <button class="btn" type="submit">{% translate "Save token" %}</button>
-    <a class="btn" href="{% url 'watcher:config-token-delete' %}">{% translate "Remove token" %}</a>
-  </form>
+  <details class="accordion" id="accordion-add" {% if add_form and add_form.errors %}open{% endif %}>
+    <summary>{% translate "Add folder" %}</summary>
+    <div class="accordion-body">
+      {% with form=add_form folder="" %}
+        {% include "watcher/_folder_form.html" %}
+      {% endwith %}
+    </div>
+  </details>
+
+  <details class="accordion" id="accordion-folders">
+    <summary>{% translate "Folders" %}</summary>
+    <div class="accordion-body">
+      <table>
+        <tr><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th></th></tr>
+        {% for f in folders %}
+          <tr>
+            <td>{{ f.name }}{% if not f.enabled %} <span class="muted">({% translate "disabled" %})</span>{% endif %}</td>
+            <td><code>{{ f.path }}</code></td>
+            <td>{% if f.branch %}{{ f.branch }}{% else %}<span class="muted">{% translate "(checked-out)" %}</span>{% endif %}</td>
+            <td>{{ f.poll_interval }}s</td>
+            <td>
+              <a class="icon-btn edit-folder" href="{% url 'watcher:config-page' %}?edit={{ f.pk }}" title="{% translate 'Edit' %}">&#9998;&#65039;</a>
+              <form method="post" action="{% url 'watcher:folder-delete' f.pk %}" class="inline delete-form">
+                {% csrf_token %}
+                <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">&#128465;&#65039;</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">{% translate "No folders yet." %}</td></tr>
+        {% endfor %}
+      </table>
+      {% for f, edit_form in edit_forms %}
+        <details class="accordion nested" id="accordion-edit-{{ f.pk }}" {% if edit_form.errors %}open{% endif %}>
+          <summary>{% translate "Edit" %}: {{ f.name }}</summary>
+          <div class="accordion-body">
+            {% with form=edit_form folder=f %}
+              {% include "watcher/_folder_form.html" %}
+            {% endwith %}
+          </div>
+        </details>
+      {% endfor %}
+    </div>
+  </details>
+
+  <details class="accordion" id="accordion-token">
+    <summary>{% translate "Git token (HTTPS)" %}</summary>
+    <div class="accordion-body">
+      <p class="muted">
+        {% translate "Used to fetch over HTTPS with authentication when your repos are cloned over SSH. Your SSH remotes are left untouched — the watcher fetches https://&lt;token&gt;@github.com/… directly without adding a second remote. A GitHub token needs the repo (read) scope." %}
+      </p>
+      <form method="post" action="{% url 'watcher:config-token' %}">
+        {% csrf_token %}
+        <table>
+          <tr>
+            <th><label for="id_token">{% translate "Token" %}</label></th>
+            <td>
+              <input type="password" name="token" id="id_token" autocomplete="off"
+                     placeholder="{{ token_hint }}" style="width: 24rem;">
+              <p class="muted">{{ token_status }}</p>
+            </td>
+          </tr>
+        </table>
+        <button class="btn" type="submit">{% translate "Save token" %}</button>
+        <a class="btn" href="{% url 'watcher:config-token-delete' %}">{% translate "Remove token" %}</a>
+      </form>
+    </div>
+  </details>
 </section>
+
+<style>
+  .page-head { margin-bottom: 1rem; }
+  .accordion { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .8rem; }
+  .accordion summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .95rem; user-select: none; }
+  .accordion-body { padding: .25rem 1rem 1rem; }
+  .accordion.nested { margin-top: .6rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .8rem; }
+  .field-label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }
+  .field input, .field select, .row select { width: 100%; box-sizing: border-box; padding: .4rem .55rem; border: 1px solid var(--input-border); border-radius: 8px; font-size: .95rem; background: var(--input-bg); color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem .9rem; }
+  .row { display: flex; gap: .45rem; align-items: center; }
+  .grow { flex: 1; }
+  .btn.icon { padding: .4rem .6rem; line-height: 1; }
+  .hint { font-size: .8rem; color: var(--muted); margin: .4rem 0 0; }
+  .hint.error { color: var(--bad); }
+  .switches { display: flex; gap: 1.5rem; margin-top: .9rem; }
+  .switch-line { display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; font-size: .9rem; color: var(--text); user-select: none; }
+  .switch-line input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; }
+  .switch { box-sizing: border-box; width: 2.4rem; height: 1.25rem; border-radius: 999px; border: none; background: var(--switch-off); position: relative; transition: background .15s ease; flex: none; }
+  .switch .knob { box-sizing: border-box; position: absolute; top: 50%; left: 2px; width: 1rem; height: 1rem; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px var(--knob-shadow); transform: translateY(-50%); transition: left .15s ease; }
+  .switch-line input:checked + .switch { background: var(--ok); }
+  .switch-line input:checked + .switch .knob { left: calc(100% - 1rem - 2px); }
+  .switch-line input:focus-visible + .switch { outline: 2px solid #93c5fd; outline-offset: 2px; }
+  .actions { display: flex; gap: .5rem; margin-top: .4rem; }
+  .btn.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); }
+  .btn.primary:hover { background: var(--primary-hover); }
+</style>
+
+<script>
+(function () {
+  var i18n = {
+    loading: "{% translate 'Loading projects…' %}",
+    choose: "{% translate '— choose a project —' %}",
+    none: "{% translate 'No projects found' %}",
+    failed: "{% translate 'Failed to load projects' %}",
+    scanning: "{% translate 'Scanning' %}: ",
+    current: " ({% translate 'current' %})",
+    noRemote: " — {% translate 'no remote' %}",
+    missing: " ({% translate 'missing from repo' %})"
+  };
+
+  function setupForm(form) {
+    if (form.dataset.vibeInit) return;
+    form.dataset.vibeInit = "1";
+    var pathInput = form.querySelector("input[name=path]");
+    var nameInput = form.querySelector("input[name=name]");
+    var branchSelect = form.querySelector("select[name=branch]");
+    var errorEl = form.querySelector(".branch-error");
+    var statusEl = form.querySelector(".find-status");
+    var projectSelect = form.querySelector(".project-select");
+    var branchesUrl = form.dataset.branchesUrl;
+    var detectUrl = form.dataset.detectUrl;
+    var findUrl = form.dataset.findUrl;
+    var savedBranch = form.dataset.savedBranch || "";
+    var initialPath = form.dataset.initialPath || "";
+
+    pathInput.type = "hidden";
+
+    function showError(message) {
+      if (message) { errorEl.textContent = message; errorEl.style.display = "block"; }
+      else { errorEl.style.display = "none"; }
+    }
+
+    function setBranchOptions(data) {
+      if (data && data.error) { showError(data.error); return; }
+      var branches = (data && data.branches) || [];
+      var placeholder = branchSelect.getAttribute("data-placeholder") || "";
+      branchSelect.innerHTML = "";
+      var empty = document.createElement("option");
+      empty.value = ""; empty.textContent = placeholder;
+      branchSelect.appendChild(empty);
+      var selectedStillThere = savedBranch === "";
+      branches.forEach(function (entry) {
+        if (typeof entry === "string") entry = { name: entry, disabled: false };
+        var opt = document.createElement("option");
+        opt.value = entry.name;
+        var label = entry.name;
+        if (entry.current) label += i18n.current;
+        if (entry.disabled) label += i18n.noRemote;
+        opt.textContent = label;
+        if (entry.disabled) opt.disabled = true;
+        if (entry.name === savedBranch) { opt.selected = true; selectedStillThere = true; }
+        branchSelect.appendChild(opt);
+      });
+      if (!selectedStillThere && savedBranch) {
+        var keep = document.createElement("option");
+        keep.value = savedBranch; keep.textContent = savedBranch + i18n.missing;
+        keep.selected = true;
+        branchSelect.appendChild(keep);
+      }
+      showError((data && data.no_remote_error) || "");
+    }
+
+    function refreshBranches() {
+      if (!pathInput.value.trim()) return;
+      fetch(branchesUrl + "?path=" + encodeURIComponent(pathInput.value))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { if (data) setBranchOptions(data); })
+        .catch(function () {});
+    }
+
+    function autodetect() {
+      if (!pathInput.value.trim()) return;
+      fetch(detectUrl + "?path=" + encodeURIComponent(pathInput.value))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) return;
+          if (data.path) pathInput.value = data.path;
+          if (data.name && !nameInput.value.trim()) nameInput.value = data.name;
+          if (data.branches) setBranchOptions(data);
+        })
+        .catch(function () {});
+    }
+
+    function loadProjects() {
+      projectSelect.innerHTML = "";
+      var loading = document.createElement("option");
+      loading.textContent = i18n.loading;
+      projectSelect.appendChild(loading);
+      statusEl.textContent = "";
+      fetch(findUrl)
+        .then(function (r) { return r.ok ? r.json() : { error: "search failed" }; })
+        .then(function (data) {
+          projectSelect.innerHTML = "";
+          var empty = document.createElement("option");
+          empty.value = "";
+          empty.textContent = i18n.choose;
+          projectSelect.appendChild(empty);
+          (data.projects || []).forEach(function (p) {
+            var opt = document.createElement("option");
+            opt.value = p.path;
+            opt.textContent = (p.registered ? "✅ " : "📦 ") + p.name + " — " + p.path;
+            if (pathInput.value && p.path === pathInput.value) opt.selected = true;
+            projectSelect.appendChild(opt);
+          });
+          if (!data.projects || !data.projects.length) {
+            var none = document.createElement("option");
+            none.textContent = i18n.none;
+            none.disabled = true;
+            projectSelect.appendChild(none);
+          }
+          statusEl.textContent = i18n.scanning + (data.base || "?") +
+            ((data.error === "truncated") ? " (truncated)" : "");
+        })
+        .catch(function () {
+          projectSelect.innerHTML = "";
+          var err = document.createElement("option");
+          err.textContent = i18n.failed;
+          projectSelect.appendChild(err);
+        });
+    }
+
+    projectSelect.addEventListener("change", function () {
+      if (projectSelect.value) {
+        pathInput.value = projectSelect.value;
+        autodetect();
+        refreshBranches();
+      }
+    });
+    form.querySelector(".refresh-projects").addEventListener("click", loadProjects);
+
+    loadProjects();
+    if (initialPath) { autodetect(); refreshBranches(); }
+  }
+
+  document.querySelectorAll("form.folder-form").forEach(setupForm);
+
+  document.querySelectorAll(".delete-form").forEach(function (form) {
+    form.addEventListener("submit", function (ev) {
+      if (!confirm("{% translate "Delete this folder from the watcher?" %}")) {
+        ev.preventDefault();
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

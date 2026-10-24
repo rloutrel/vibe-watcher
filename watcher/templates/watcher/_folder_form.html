@@ -1,0 +1,68 @@
+{% load i18n %}
+<form method="post"
+      class="folder-form"
+      {% if folder %}action="{% url 'watcher:folder-update' folder.pk %}"{% else %}action="{% url 'watcher:folder-create' %}"{% endif %}
+      data-branches-url="{% url 'watcher:branches-for-path' %}"
+      data-detect-url="{% url 'watcher:folder-detect' %}"
+      data-find-url="{% url 'watcher:folder-find' %}"
+      data-saved-branch="{{ folder.branch|default:'' }}"
+      data-initial-path="{{ folder.path|default:'' }}">
+  {% csrf_token %}
+
+  <div class="card">
+    <label class="field-label project-label">{% translate "Project" %}</label>
+    <div class="row">
+      <select class="project-select grow"></select>
+      <button type="button" class="btn icon refresh-projects" title="Refresh project list">⟳</button>
+    </div>
+    <p class="find-status hint"></p>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="field">
+        <label class="field-label" for="{{ form.name.id_for_label }}">{% translate "Name" %}</label>
+        {{ form.name }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="{{ form.branch.id_for_label }}">{% translate "Branch" %}</label>
+        {{ form.branch }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="{{ form.poll_interval.id_for_label }}">{% translate "Poll interval (s)" %}</label>
+        {{ form.poll_interval }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="{{ form.post_pull_command.id_for_label }}">{% translate "After pull" %}</label>
+        {{ form.post_pull_command }}
+      </div>
+      <div class="field">
+        <label class="field-label" for="{{ form.git_token.id_for_label }}">{% translate "Git token (private repos)" %}</label>
+        {{ form.git_token }}
+      </div>
+    </div>
+    {{ form.path }}
+    <div class="switches">
+      <label class="switch-line">
+        <span>{% translate "Auto-pull" %}</span>
+        {{ form.auto_pull }}
+        <span class="switch"><span class="knob"></span></span>
+      </label>
+      <label class="switch-line">
+        <span>{% translate "Enabled" %}</span>
+        {{ form.enabled }}
+        <span class="switch"><span class="knob"></span></span>
+      </label>
+    </div>
+  </div>
+
+  <p class="branch-error hint error" style="display: none;"></p>
+
+  {% if form.errors %}
+    <p class="hint error">{% translate "Please fix the errors above." %}</p>
+  {% endif %}
+
+  <div class="actions">
+    <button class="btn primary" type="submit">{% translate "Save" %}</button>
+  </div>
+</form>

@@ -22,7 +22,7 @@
 </section>
 
 <section>
-  <h2>{% translate "Folders" %} <a class="btn" href="{% url 'watcher:folder-create' %}">{% translate "Add folder" %}</a></h2>
+  <h2>{% translate "Folders" %} <a class="btn" href="{% url 'watcher:config-page' %}">{% translate "Add folder" %}</a></h2>
   <table>
     <tr><th>ON/OFF</th><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th>{% translate "Latest state" %}</th><th>{% translate "Actions" %}</th></tr>
     {% for folder, snapshot, can_start in rows %}
@@ -60,7 +60,7 @@
             {% csrf_token %}
             <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
           </form>
-          <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="{% translate 'Edit' %}">✏️</a>
+          <a class="icon-btn" href="{% url 'watcher:config-page' %}" title="{% translate 'Edit' %}">✏️</a>
           <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
             {% csrf_token %}
             <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
