@@ -68,6 +68,7 @@
                 <button class="icon-btn stop-btn" type="submit" title="{% translate 'Stop the docker stack' %}">⏹</button>
               </form>
             {% endif %}
+            <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="{% translate 'Edit' %}">✏️</a>
             <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
               {% csrf_token %}
               <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>

@@ -69,5 +69,8 @@
 
   <div class="actions">
     <button class="btn primary" type="submit">{% translate "Save" %}</button>
+    {% if folder %}
+      <a class="btn" href="{% url 'watcher:index' %}">{% translate "Cancel" %}</a>
+    {% endif %}
   </div>
 </form>
