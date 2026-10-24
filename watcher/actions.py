@@ -5,6 +5,7 @@ tested with fully mocked subprocess calls.
 """
 
 import logging
+import os
 import subprocess
 
 from django.conf import settings
@@ -104,7 +105,10 @@ def docker_running(folder):
     compose_file = find_compose_file(folder.path)
     if not compose_file:
         return None  # no docker project here
-    proc = _run_docker(["compose", "ls", "--format", "json"], cwd=folder.path)
+    proc = _run_docker(
+        ["compose", "-f", compose_file, "ls", "--format", "json"],
+        cwd=os.path.dirname(compose_file),
+    )
     if proc is None or proc.returncode != 0:
         return None
     import json
@@ -119,24 +123,50 @@ def docker_running(folder):
         if not isinstance(project, dict):
             continue
         config_files = str(project.get("ConfigFiles", ""))
-        if os.path.basename(compose_file) in config_files or config_files == "":
+        if compose_file in config_files or config_files == "":
             status = str(project.get("Status", ""))
             if "running" in status.lower():
                 return True
     return False
 
 
-def find_compose_file(path):
+def find_compose_file(path, max_depth=3):
+    """Find a compose config in the folder, then in its subdirectories.
+
+    A shallow breadth-first search keeps it cheap while still finding
+    layouts like ``docker/compose.yaml`` or ``deploy/compose.yml``.
+    Hidden, dependency and vendor directories are skipped.
+    """
     import os
 
     candidates = [
         "compose.yaml", "compose.yml",
         "docker-compose.yaml", "docker-compose.yml",
     ]
-    for candidate in candidates:
-        full = os.path.join(path, candidate)
-        if os.path.isfile(full):
-            return full
+    skip = {
+        ".git", ".venv", "venv", "node_modules", "__pycache__",
+        ".tox", ".mypy_cache", ".idea", ".vscode",
+    }
+    root = os.path.abspath(path)
+    queue = [(root, 0)]
+    while queue:
+        current, depth = queue.pop(0)
+        for candidate in candidates:
+            full = os.path.join(current, candidate)
+            if os.path.isfile(full):
+                return full
+        if depth >= max_depth:
+            continue
+        try:
+            entries = sorted(os.listdir(current))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry in skip or entry.startswith("."):
+                continue
+            child = os.path.join(current, entry)
+            if os.path.isdir(child) and not os.path.islink(child):
+                queue.append((child, depth + 1))
     return None
 
 
@@ -164,7 +194,13 @@ def _run_docker(args, cwd):
 
 def start_docker(folder):
     """Start the folder's docker stack (docker compose up -d)."""
-    proc = _run_docker(["compose", "up", "-d"], cwd=folder.path)
+    compose_file = find_compose_file(folder.path)
+    if not compose_file:
+        return False, "no compose file found"
+    proc = _run_docker(
+        ["compose", "-f", compose_file, "up", "-d"],
+        cwd=os.path.dirname(compose_file),
+    )
     if proc is None:
         return False, "docker not available"
     if proc.returncode != 0:
@@ -174,7 +210,13 @@ def start_docker(folder):
 
 def stop_docker(folder):
     """Stop the folder's docker stack (docker compose down)."""
-    proc = _run_docker(["compose", "down"], cwd=folder.path)
+    compose_file = find_compose_file(folder.path)
+    if not compose_file:
+        return False, "no compose file found"
+    proc = _run_docker(
+        ["compose", "-f", compose_file, "down"],
+        cwd=os.path.dirname(compose_file),
+    )
     if proc is None:
         return False, "docker not available"
     if proc.returncode != 0:

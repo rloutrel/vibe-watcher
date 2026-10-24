@@ -1,3 +1,5 @@
+import json
+import os
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -1362,14 +1364,19 @@ class DockerStartOfferTests(TestCase, RepoFixture):
             proc.stderr = ""
             return proc
 
+        compose_path = os.path.join(self.repo, "compose.yaml")
         docker_mock.return_value = mkproc(
-            0, '[{"Name":"proj","Status":"running(3)","ConfigFiles":"compose.yaml"}]'
+            0, json.dumps(
+                [{"Name": "proj", "Status": "running(3)", "ConfigFiles": compose_path}]
+            )
         )
         folder = self.make_folder()
         self.assertIs(docker_running(folder), True)
 
         docker_mock.return_value = mkproc(
-            0, '[{"Name":"proj","Status":"exited(0)","ConfigFiles":"compose.yaml"}]'
+            0, json.dumps(
+                [{"Name": "proj", "Status": "exited(0)", "ConfigFiles": compose_path}]
+            )
         )
         self.assertIs(docker_running(folder), False)
 
@@ -1384,6 +1391,75 @@ class DockerStartOfferTests(TestCase, RepoFixture):
         folder = self.make_folder()
         self.assertIsNone(docker_running(folder))
         docker_mock.assert_not_called()
+
+    def test_find_compose_file_in_subdirectory(self):
+        import os
+        import shutil
+
+        from watcher.actions import find_compose_file
+
+        os.remove(os.path.join(self.repo, "compose.yaml"))
+        docker_dir = os.path.join(self.repo, "docker")
+        os.makedirs(docker_dir)
+        with open(os.path.join(docker_dir, "compose.yaml"), "w") as fh:
+            fh.write("services: {web: {image: nginx}}\n")
+        found = find_compose_file(self.repo)
+        self.assertEqual(found, os.path.join(self.repo, "docker", "compose.yaml"))
+        shutil.rmtree(docker_dir)
+
+    def test_find_compose_file_skips_hidden_and_vendor_dirs(self):
+        import os
+        import shutil
+
+        from watcher.actions import find_compose_file
+
+        os.remove(os.path.join(self.repo, "compose.yaml"))
+        for name in (".git", "node_modules"):
+            hidden = os.path.join(self.repo, name)
+            os.makedirs(hidden)
+            with open(os.path.join(hidden, "compose.yml"), "w") as fh:
+                fh.write("services: {web: {image: nginx}}\n")
+        self.assertIsNone(find_compose_file(self.repo))
+        shutil.rmtree(os.path.join(self.repo, ".git"))
+        shutil.rmtree(os.path.join(self.repo, "node_modules"))
+
+    def test_find_compose_file_prefers_root(self):
+        import os
+
+        from watcher.actions import find_compose_file
+
+        deploy = os.path.join(self.repo, "deploy")
+        os.makedirs(deploy)
+        with open(os.path.join(deploy, "compose.yaml"), "w") as fh:
+            fh.write("services: {web: {image: nginx}}\n")
+        found = find_compose_file(self.repo)
+        self.assertEqual(found, os.path.join(self.repo, "compose.yaml"))
+
+    @mock.patch("watcher.actions._run_docker")
+    def test_docker_running_uses_compose_file_flag(self, docker_mock):
+        import os
+        import shutil
+
+        from watcher.actions import docker_running
+
+        os.remove(os.path.join(self.repo, "compose.yaml"))
+        docker_dir = os.path.join(self.repo, "docker")
+        os.makedirs(docker_dir)
+        compose_path = os.path.join(docker_dir, "compose.yaml")
+        with open(compose_path, "w") as fh:
+            fh.write("services: {web: {image: nginx}}\n")
+        proc = mock.Mock(returncode=0, stderr="")
+        proc.stdout = json.dumps(
+            [{"Name": "proj", "Status": "running(1)", "ConfigFiles": compose_path}]
+        )
+        docker_mock.return_value = proc
+        folder = self.make_folder()
+        self.assertIs(docker_running(folder), True)
+        args = docker_mock.call_args[0][0]
+        cwd = docker_mock.call_args[1]["cwd"]
+        self.assertIn("-f", args)
+        self.assertEqual(cwd, docker_dir)
+        shutil.rmtree(docker_dir)
 
     @mock.patch("watcher.scanner.start_docker")
     @mock.patch("watcher.scanner.docker_running", return_value=False)
@@ -1444,7 +1520,10 @@ class DockerStartOfferTests(TestCase, RepoFixture):
         ok, out = start_docker(folder)
         self.assertTrue(ok)
         args, kwargs = docker_mock.call_args
-        self.assertEqual(args[0][:3], ["compose", "up", "-d"])
+        self.assertEqual(args[0][0], "compose")
+        self.assertEqual(args[0][1], "-f")
+        self.assertEqual(args[0][2], os.path.join(self.repo, "compose.yaml"))
+        self.assertEqual(args[0][3:], ["up", "-d"])
         self.assertEqual(kwargs["cwd"], self.repo)
 
     @mock.patch.object(DbusNotificationBackend, "_run_notify_send")
