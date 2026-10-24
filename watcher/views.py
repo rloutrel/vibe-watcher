@@ -41,20 +41,17 @@ def _index_context(add_form=None, edit_folder=None, edit_form=None):
 
     folders = list(Folder.objects.order_by("name"))
     latest_by_folder = {}
-    stack_down = {}
+    docker_state = {}
     for folder in folders:
         latest_by_folder[folder.id] = Snapshot.objects.filter(folder=folder).first()
-        # Show the start button when the project has a docker compose
-        # post-pull command but its stack isn't running.
-        if folder.enabled and "docker compose" in (folder.post_pull_command or ""):
-            stack_down[folder.id] = docker_running(folder) is False
-        else:
-            stack_down[folder.id] = False
+        # docker_running() returns True/False for a compose project
+        # (stack up/down) or None when the folder has no compose file.
+        docker_state[folder.id] = docker_running(folder)
     rows = [
         (
             folder,
             latest_by_folder.get(folder.id),
-            stack_down[folder.id],
+            docker_state[folder.id],
             edit_form if edit_folder is not None and folder.pk == edit_folder.pk else None,
             FolderForm(instance=folder),
         )

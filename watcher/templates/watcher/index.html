@@ -58,12 +58,12 @@
                 {% csrf_token %}
                 <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
               </form>
-              {% if can_start %}
+              {% if can_start == False %}
                 <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
                   {% csrf_token %}
                   <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
                 </form>
-              {% else %}
+              {% elif can_start == True %}
                 <form method="post" action="{% url 'watcher:folder-stop-docker' folder.pk %}" class="inline stop-form">
                   {% csrf_token %}
                   <button class="icon-btn stop-btn" type="submit" title="{% translate 'Stop the docker stack' %}">⏹</button>

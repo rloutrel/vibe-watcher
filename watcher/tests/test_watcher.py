@@ -2428,16 +2428,18 @@ class StartDockerButtonTests(TestCase, RepoFixture):
         self.assertIn(reverse("watcher:folder-start-docker", args=[Folder.objects.first().pk]), html)
 
     @mock.patch("watcher.actions.docker_running", return_value=True)
-    def test_start_button_hidden_when_stack_up(self, _mock):
+    def test_stop_button_shown_when_stack_up(self, _mock):
         self.make_folder(name="x", path="/tmp/x", post_pull_command="docker compose up -d")
         html = self.client.get(reverse("watcher:index")).content.decode()
         self.assertNotIn("start-form", html)
+        self.assertIn("stop-form", html)
 
-    @mock.patch("watcher.actions.docker_running", return_value=False)
-    def test_no_button_without_compose_command(self, _mock):
+    @mock.patch("watcher.actions.docker_running", return_value=None)
+    def test_no_docker_buttons_without_compose_project(self, _mock):
         self.make_folder(name="x", path="/tmp/x", post_pull_command="")
         html = self.client.get(reverse("watcher:index")).content.decode()
         self.assertNotIn("start-form", html)
+        self.assertNotIn("stop-form", html)
 
     def test_start_action_redirects_and_records(self):
         import watcher.actions as actions
