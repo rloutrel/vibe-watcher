@@ -12,7 +12,7 @@ services:
   web:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
     ports:
       - "${VIBE_WATCHER_WEB_PORT:-28888}:8000"
     environment:
@@ -40,7 +40,7 @@ services:
   watcher:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
     environment:
       VIBE_WATCHER_DEBUG: "0"
       VIBE_WATCHER_DB: "postgres"

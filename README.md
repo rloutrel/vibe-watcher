@@ -19,14 +19,14 @@ watcher heartbeat indicator that flags a stale or stopped watcher.
 | Notifications | `watcher/notify.py` (dbus / none backends) |
 | Web UI | `watcher/views.py`, `watcher/templates/watcher/` |
 | Systemd packaging | `packaging/systemd/` |
-| Compose setup | `compose/docker-compose.yml` |
+| Docker setup | `docker/` (Dockerfile, docker-compose.yml) |
 | Tests | `watcher/tests/` |
 
 ## Quickstart (docker compose)
 
 ```bash
 git clone https://github.com/rloutrel/vibe-watcher ~/vibe-watcher
-cd ~/vibe-watcher/compose
+cd ~/vibe-watcher/docker
 cp .env.example .env                 # adjust VIBE_WATCHER_PROJECTS_DIR etc.
 docker compose up --build -d
 docker compose exec web python manage.py createsuperuser
@@ -34,7 +34,7 @@ docker compose exec web python manage.py createsuperuser
 
 Web UI on `http://localhost:28888` (override with
 `VIBE_WATCHER_WEB_PORT`). Set `VIBE_WATCHER_PROJECTS_DIR` in
-`compose/.env` to the host folder holding your projects — it is mounted
+`docker/.env` to the host folder holding your projects — it is mounted
 at the same path in the containers, so register folders with their host
 paths. Desktop notifications are unavailable in compose (no session
 bus); use the systemd user service below if you need them.
@@ -77,11 +77,11 @@ leave it empty to watch the currently checked-out branch.
 ## Compose details
 
 The stack runs three services: `web` (Django dev server published on host port
-**28888** — override with `VIBE_WATCHER_WEB_PORT` in `compose/.env`),
+**28888** — override with `VIBE_WATCHER_WEB_PORT` in `docker/.env`),
 `watcher`
 (`manage.py watch_folders`), and `db` (PostgreSQL 16). Your projects are mounted in the containers **at their host paths**
 (`VIBE_WATCHER_PROJECTS_DIR`, default `$HOME` — set it in
-`compose/.env`). Identical paths on both sides mean no translation:
+`docker/.env`). Identical paths on both sides mean no translation:
 registered host paths work as-is, and `docker compose` commands the
 watcher runs against your projects operate on the **host Docker daemon**
 (the socket is mounted) with correct paths. The image ships the docker
