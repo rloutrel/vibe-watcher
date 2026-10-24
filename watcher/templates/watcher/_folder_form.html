@@ -20,10 +20,7 @@
 
   <div class="card">
     <div class="grid">
-      <div class="field">
-        <label class="field-label" for="{{ form.name.id_for_label }}">{% translate "Name" %}</label>
-        {{ form.name }}
-      </div>
+      {{ form.name.as_hidden }}
       <div class="field">
         <label class="field-label" for="{{ form.branch.id_for_label }}">{% translate "Branch" %}</label>
         {{ form.branch }}

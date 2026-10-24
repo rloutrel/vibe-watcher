@@ -38,7 +38,11 @@
       <details class="accordion folder-card" data-folder-row="{{ folder.pk }}" {% if edit_form %}open{% endif %}>
         <summary>
           <span class="folder-title">
-            {{ folder.name }}
+            <form method="post" action="{% url 'watcher:folder-rename' folder.pk %}" class="inline rename-form">
+              {% csrf_token %}
+              <input class="folder-name-input" type="text" name="name" value="{{ folder.name }}"
+                     title="{% translate 'Rename' %}" aria-label="{% translate 'Name' %}">
+            </form>
             {% if not folder.enabled %}<span class="muted">({% translate "disabled" %})</span>{% endif %}
           </span>
           {% if snapshot %}
@@ -161,6 +165,9 @@
   .folder-grid .accordion { margin-bottom: 0; }
   .folder-card summary { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .folder-title { overflow-wrap: anywhere; }
+  .folder-name-input { border: 1px solid transparent; background: none; color: var(--text); font-size: .95rem; font-weight: 600; padding: .1rem .3rem; border-radius: 6px; width: 100%; max-width: 14rem; }
+  .folder-name-input:hover { border-color: var(--input-border); }
+  .folder-name-input:focus { border-color: var(--input-border); background: var(--input-bg); outline: none; }
   .folder-actions { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; }
   .folder-edit { margin-top: .8rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .8rem; }
@@ -324,6 +331,27 @@
 
   document.querySelectorAll("form.folder-form").forEach(setupForm);
 
+  document.querySelectorAll(".rename-form").forEach(function (form) {
+    var input = form.querySelector(".folder-name-input");
+    function save() {
+      if (input.dataset.saved === input.value) return;
+      input.dataset.saved = input.value;
+      fetch(form.action, {
+        method: "POST",
+        headers: {"X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value},
+        body: new FormData(form)
+      }).catch(function () {});
+    }
+    input.dataset.saved = input.value;
+    input.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    input.addEventListener("keydown", function (ev) {
+      ev.stopPropagation();
+      if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+      if (ev.key === "Escape") { input.value = input.dataset.saved; input.blur(); }
+    });
+    input.addEventListener("blur", save);
+    form.addEventListener("submit", function (ev) { ev.preventDefault(); save(); });
+  });
   document.querySelectorAll(".toggle-form").forEach(function (form) {
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();

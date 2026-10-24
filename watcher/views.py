@@ -239,6 +239,19 @@ def folder_toggle(request, pk):
 
 
 @login_required
+@require_POST
+def folder_rename(request, pk):
+    """Rename a folder in place (inline input in the card summary)."""
+    folder = get_object_or_404(Folder, pk=pk)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "missing name"}, status=400)
+    folder.name = name
+    folder.save(update_fields=["name"])
+    return JsonResponse({"id": folder.id, "name": folder.name})
+
+
+@login_required
 def folders_export(request):
     """Download the folder configuration as JSON (local backup)."""
     import json

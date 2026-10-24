@@ -18,6 +18,7 @@ urlpatterns = [
     path("folders/browse/", views.browse_path, name="folder-browse"),
     path("folders/find/", views.find_projects, name="folder-find"),
     path("folders/<int:pk>/toggle/", views.folder_toggle, name="folder-toggle"),
+    path("folders/<int:pk>/rename/", views.folder_rename, name="folder-rename"),
     path("folders/<int:pk>/check/", views.folder_check_now, name="folder-check-now"),
     path("folders/<int:pk>/start/", views.folder_start_docker, name="folder-start-docker"),
     path("folders/export/", views.folders_export, name="folders-export"),
