@@ -65,7 +65,7 @@ def _index_context(add_form=None, edit_folder=None, edit_form=None):
         add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
     return {
         "rows": rows,
-        "events": WatcherEvent.objects.select_related("folder")[:50],
+        "events": WatcherEvent.objects.select_related("folder")[:20],
         "watcher": watcher_status(),
         "code_version": code_version(),
         "token_hint": "ghp_••••••••••••••••••••" if token else "",
@@ -250,6 +250,14 @@ def folder_rename(request, pk):
     folder.name = name
     folder.save(update_fields=["name"])
     return JsonResponse({"id": folder.id, "name": folder.name})
+
+
+@login_required
+@require_POST
+def events_clear(request):
+    """Delete all events from the activity feed."""
+    WatcherEvent.objects.all().delete()
+    return redirect("watcher:index")
 
 
 @login_required

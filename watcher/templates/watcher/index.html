@@ -53,25 +53,27 @@
                 <span class="knob"></span>
               </button>
             </form>
-            <form method="post" action="{% url 'watcher:folder-check-now' folder.pk %}" class="inline check-form">
-              {% csrf_token %}
-              <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
-            </form>
-            {% if can_start %}
-              <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
+            <span class="folder-action-group">
+              <form method="post" action="{% url 'watcher:folder-check-now' folder.pk %}" class="inline check-form">
                 {% csrf_token %}
-                <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
+                <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
               </form>
-            {% else %}
-              <form method="post" action="{% url 'watcher:folder-stop-docker' folder.pk %}" class="inline stop-form">
+              {% if can_start %}
+                <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
+                  {% csrf_token %}
+                  <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
+                </form>
+              {% else %}
+                <form method="post" action="{% url 'watcher:folder-stop-docker' folder.pk %}" class="inline stop-form">
+                  {% csrf_token %}
+                  <button class="icon-btn stop-btn" type="submit" title="{% translate 'Stop the docker stack' %}">⏹</button>
+                </form>
+              {% endif %}
+              <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
                 {% csrf_token %}
-                <button class="icon-btn stop-btn" type="submit" title="{% translate 'Stop the docker stack' %}">⏹</button>
+                <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
               </form>
-            {% endif %}
-            <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
-              {% csrf_token %}
-              <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
-            </form>
+            </span>
             <span class="badge {% if snapshot.state == 'error' %}stale{% elif snapshot.state == 'empty' %}never-run{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}" data-state-badge>{{ snapshot.state|default:"–" }}</span>
             <span class="folder-caret" aria-hidden="true">⌄</span>
           </span>
@@ -142,7 +144,13 @@
 </section>
 
 <section>
-  <h2>{% translate "Recent events" %}</h2>
+  <div class="page-head">
+    <h2>{% translate "Recent events" %}</h2>
+    <form method="post" action="{% url 'watcher:events-clear' %}" class="inline events-clear-form">
+      {% csrf_token %}
+      <button class="btn icon-btn" type="submit" title="{% translate 'Clear all events' %}">🗑️</button>
+    </form>
+  </div>
   <table>
     <tr><th>{% translate "When" %}</th><th>{% translate "Kind" %}</th><th>{% translate "Folder" %}</th><th>{% translate "Message" %}</th></tr>
     {% for event in events %}
@@ -156,13 +164,16 @@
       <tr><td colspan="4" class="muted">{% translate "No events yet. The watcher writes events here as it polls." %}</td></tr>
     {% endfor %}
   </table>
+  {% if events|length == 20 %}
+    <p class="muted">{% translate "Showing the 20 latest events." %}</p>
+  {% endif %}
 </section>
 
 <p class="muted" style="font-size:.75rem; margin-top:2rem;">vibe-watcher @ {{ code_version }}</p>
 
 <style>
-  .accordion { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .8rem; }
-  .accordion summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .95rem; user-select: none; }
+  .page-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .accordion { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .8rem; }  .accordion summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .95rem; user-select: none; }
   .accordion-body { padding: .25rem 1rem 1rem; }
   .accordion.nested { margin-top: .6rem; }
   .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); gap: .8rem; margin-bottom: 2rem; }
@@ -170,6 +181,7 @@
   .folder-card summary { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .folder-summary-actions { display: flex; align-items: center; gap: .5rem; }
   .folder-summary-actions form { display: inline-flex; }
+  .folder-action-group { display: inline-flex; align-items: center; gap: .1rem; padding-left: .25rem; border-left: 1px solid var(--border); }
   .folder-caret { font-size: 1rem; color: var(--muted); transition: transform .15s ease; }
   .folder-card[open] .folder-caret { transform: rotate(180deg); }
   details.folder-card > summary { list-style: none; }
@@ -348,7 +360,11 @@
     summary.addEventListener("click", function (ev) {
       ev.preventDefault();
       if (ev.target.closest("form, input, button, a")) return;
-      card.open = !card.open;
+      var wasOpen = card.open;
+      document.querySelectorAll("details.folder-card[open]").forEach(function (other) {
+        other.open = false;
+      });
+      card.open = !wasOpen;
     });
   });
   document.querySelectorAll(".rename-form").forEach(function (form) {

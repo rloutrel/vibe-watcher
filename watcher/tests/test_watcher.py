@@ -470,6 +470,20 @@ class UITests(TestCase, RepoFixture):
         self.assertContains(response, 'value="45"')
         self.assertNotContains(response, "✏️")
 
+    def test_events_feed_capped_at_20_and_has_clear_button(self):
+        self.client.login(username="alice", password="pw")
+        folder = Folder.objects.create(name="ev", path="/tmp/ev")
+        for i in range(30):
+            WatcherEvent.objects.create(folder=folder, kind="scan", message=f"event {i}")
+        response = self.client.get(reverse("watcher:index"))
+        self.assertContains(response, "event 29")
+        self.assertContains(response, "event 10")
+        self.assertNotContains(response, "event 9</td>")
+        self.assertContains(response, reverse("watcher:events-clear"))
+        response = self.client.post(reverse("watcher:events-clear"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(WatcherEvent.objects.count(), 0)
+
 
 
 class BranchSelectionTests(TestCase, RepoFixture):
