@@ -340,6 +340,23 @@ def folder_start_docker(request, pk):
 
 @login_required
 @require_POST
+def folder_stop_docker(request, pk):
+    """Manually stop the folder's docker stack."""
+    from .actions import stop_docker
+
+    folder = get_object_or_404(Folder, pk=pk)
+    ok, output = stop_docker(folder)
+    record_event(
+        "change" if ok else "error",
+        f"{folder.name}: docker stack {'stopped' if ok else 'failed to stop'} (manual)",
+        folder=folder,
+        detail={"output": output[-500:]},
+    )
+    return redirect("watcher:index")
+
+
+@login_required
+@require_POST
 def folder_check_now(request, pk):
     """Scan one folder immediately and return the fresh snapshot."""
     from . import scanner
