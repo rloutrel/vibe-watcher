@@ -56,6 +56,7 @@ def _index_context(add_form=None, edit_folder=None, edit_form=None):
             latest_by_folder.get(folder.id),
             stack_down[folder.id],
             edit_form if edit_folder is not None and folder.pk == edit_folder.pk else None,
+            FolderForm(instance=folder),
         )
         for folder in folders
     ]

@@ -457,23 +457,18 @@ class UITests(TestCase, RepoFixture):
         self.client.post(reverse("watcher:folder-delete", args=[folder.pk]))
         self.assertFalse(Folder.objects.filter(name="repo-x").exists())
 
-    def test_index_card_has_edit_link(self):
+    def test_index_card_has_inline_edit_form(self):
         self.client.login(username="alice", password="pw")
-        Folder.objects.create(name="repo-e", path="/tmp/e")
+        folder = Folder.objects.create(name="repo-e", path="/tmp/e", branch="dev", poll_interval=45)
         response = self.client.get(reverse("watcher:index"))
-        self.assertContains(
-            response,
-            'href="%s"' % reverse("watcher:folder-update", args=[Folder.objects.get().pk]),
-        )
-
-    def test_edit_page_renders_inline_form_with_fields(self):
-        self.client.login(username="alice", password="pw")
-        folder = Folder.objects.create(name="repo-f", path="/tmp/f")
-        response = self.client.get(reverse("watcher:folder-update", args=[folder.pk]))
+        self.assertContains(response, 'action="%s"' % reverse("watcher:folder-update", args=[folder.pk]))
         self.assertContains(response, 'name="branch"')
         self.assertContains(response, 'name="poll_interval"')
         self.assertContains(response, 'name="post_pull_command"')
         self.assertContains(response, 'name="git_token"')
+        self.assertContains(response, 'data-saved-branch="dev"')
+        self.assertContains(response, 'value="45"')
+        self.assertNotContains(response, "✏️")
 
 
 

@@ -34,7 +34,7 @@
         {% endwith %}
       </div>
     </details>
-    {% for folder, snapshot, can_start, edit_form in rows %}
+    {% for folder, snapshot, can_start, edit_form, card_form in rows %}
       <details class="accordion folder-card" data-folder-row="{{ folder.pk }}" {% if edit_form %}open{% endif %}>
         <summary>
           <span class="folder-title">
@@ -68,7 +68,6 @@
                 <button class="icon-btn stop-btn" type="submit" title="{% translate 'Stop the docker stack' %}">⏹</button>
               </form>
             {% endif %}
-            <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="{% translate 'Edit' %}">✏️</a>
             <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
               {% csrf_token %}
               <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
@@ -85,11 +84,15 @@
             {% if snapshot and snapshot.upstream %} · {{ snapshot.commits_behind }} {% translate "behind" %} / {{ snapshot.commits_ahead }} {% translate "ahead" %}{% endif %}
           </p>
           <div class="folder-edit">
-            {% with form=edit_form|default:False folder=folder %}
-              {% if form %}
+            {% if edit_form %}
+              {% with form=edit_form folder=folder %}
                 {% include "watcher/_folder_form.html" %}
-              {% endif %}
-            {% endwith %}
+              {% endwith %}
+            {% else %}
+              {% with form=card_form folder=folder %}
+                {% include "watcher/_folder_form.html" %}
+              {% endwith %}
+            {% endif %}
           </div>
         </div>
       </details>
@@ -331,9 +334,10 @@
         refreshBranches();
       }
     });
-    form.querySelector(".refresh-projects").addEventListener("click", loadProjects);
-
-    loadProjects();
+    if (projectSelect) {
+      form.querySelector(".refresh-projects").addEventListener("click", loadProjects);
+      loadProjects();
+    }
     if (initialPath) { autodetect(); refreshBranches(); }
   }
 

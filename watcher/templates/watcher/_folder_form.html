@@ -9,14 +9,16 @@
       data-initial-path="{{ folder.path|default:'' }}">
   {% csrf_token %}
 
-  <div class="card">
-    <label class="field-label project-label">{% translate "Project" %}</label>
-    <div class="row">
-      <select class="project-select grow"></select>
-      <button type="button" class="btn icon refresh-projects" title="Refresh project list">⟳</button>
+  {% if not folder %}
+    <div class="card">
+      <label class="field-label project-label">{% translate "Project" %}</label>
+      <div class="row">
+        <select class="project-select grow"></select>
+        <button type="button" class="btn icon refresh-projects" title="Refresh project list">⟳</button>
+      </div>
+      <p class="find-status hint"></p>
     </div>
-    <p class="find-status hint"></p>
-  </div>
+  {% endif %}
 
   {{ form.non_field_errors }}
 
@@ -69,8 +71,5 @@
 
   <div class="actions">
     <button class="btn primary" type="submit">{% translate "Save" %}</button>
-    {% if folder %}
-      <a class="btn" href="{% url 'watcher:index' %}">{% translate "Cancel" %}</a>
-    {% endif %}
   </div>
 </form>
