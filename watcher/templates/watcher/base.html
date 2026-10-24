@@ -59,9 +59,9 @@
       <input name="next" type="hidden" value="{{ request.path }}">
       <label for="lang-select" class="lang-label">🌐</label>
       <select name="language" id="lang-select" onchange="this.form.submit()">
-        <option value="fr" {% if LANGUAGE_CODE == 'fr' %}selected{% endif %}>🇫🇷 Français</option>
-        <option value="de" {% if LANGUAGE_CODE == 'de' %}selected{% endif %}>🇩🇪 Deutsch</option>
-        <option value="en" {% if LANGUAGE_CODE == 'en' %}selected{% endif %}>🇬🇧 English</option>
+        <option value="fr" {% if LANGUAGE_CODE == 'fr' %}selected{% endif %} title="Français">🇫🇷</option>
+        <option value="de" {% if LANGUAGE_CODE == 'de' %}selected{% endif %} title="Deutsch">🇩🇪</option>
+        <option value="en" {% if LANGUAGE_CODE == 'en' %}selected{% endif %} title="English">🇬🇧</option>
       </select>
     </form>
     <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle dark/light">🌙</button>
