@@ -339,14 +339,14 @@
         });
     }
 
-    projectSelect.addEventListener("change", function () {
-      if (projectSelect.value) {
-        pathInput.value = projectSelect.value;
-        autodetect();
-        refreshBranches();
-      }
-    });
     if (projectSelect) {
+      projectSelect.addEventListener("change", function () {
+        if (projectSelect.value) {
+          pathInput.value = projectSelect.value;
+          autodetect();
+          refreshBranches();
+        }
+      });
       form.querySelector(".refresh-projects").addEventListener("click", loadProjects);
       loadProjects();
     }
