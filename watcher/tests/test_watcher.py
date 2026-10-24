@@ -928,13 +928,11 @@ class ToggleExportImportTests(TestCase, RepoFixture):
     def test_toggle_flips_enabled(self):
         folder = self.make_folder(enabled=True)
         response = self.client.post(reverse("watcher:folder-toggle", args=[folder.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["enabled"], False)
+        self.assertEqual(response.status_code, 302)
         folder.refresh_from_db()
         self.assertFalse(folder.enabled)
 
         response = self.client.post(reverse("watcher:folder-toggle", args=[folder.pk]))
-        self.assertEqual(response.json()["enabled"], True)
         folder.refresh_from_db()
         self.assertTrue(folder.enabled)
 

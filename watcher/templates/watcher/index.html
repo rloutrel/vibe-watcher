@@ -176,7 +176,7 @@
   .accordion { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .8rem; }  .accordion summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .95rem; user-select: none; }
   .accordion-body { padding: .25rem 1rem 1rem; }
   .accordion.nested { margin-top: .6rem; }
-  .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); gap: .8rem; margin-bottom: 2rem; }
+  .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); gap: .8rem; margin-bottom: 2rem; align-items: start; }
   .folder-grid .accordion { margin-bottom: 0; }
   .folder-card summary { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .folder-summary-actions { display: flex; align-items: center; gap: .5rem; }
@@ -360,11 +360,7 @@
     summary.addEventListener("click", function (ev) {
       ev.preventDefault();
       if (ev.target.closest("form, input, button, a")) return;
-      var wasOpen = card.open;
-      document.querySelectorAll("details.folder-card[open]").forEach(function (other) {
-        other.open = false;
-      });
-      card.open = !wasOpen;
+      card.open = !card.open;
     });
   });
   document.querySelectorAll(".rename-form").forEach(function (form) {

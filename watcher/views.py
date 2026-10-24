@@ -236,7 +236,7 @@ def folder_toggle(request, pk):
     folder = get_object_or_404(Folder, pk=pk)
     folder.enabled = not folder.enabled
     folder.save(update_fields=["enabled"])
-    return JsonResponse({"id": folder.id, "enabled": folder.enabled})
+    return redirect("watcher:index")
 
 
 @login_required
