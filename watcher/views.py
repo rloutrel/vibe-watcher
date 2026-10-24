@@ -33,7 +33,7 @@ def watcher_status():
     }
 
 
-def _index_context(add_form=None, edit_forms=None):
+def _index_context(add_form=None, edit_folder=None, edit_form=None):
     """Context for the main page: watcher state, folder rows, events,
     and the inlined folder/token configuration (accordion)."""
     from .actions import docker_running
@@ -51,14 +51,17 @@ def _index_context(add_form=None, edit_forms=None):
         else:
             stack_down[folder.id] = False
     rows = [
-        (folder, latest_by_folder.get(folder.id), stack_down[folder.id])
+        (
+            folder,
+            latest_by_folder.get(folder.id),
+            stack_down[folder.id],
+            edit_form if edit_folder is not None and folder.pk == edit_folder.pk else None,
+        )
         for folder in folders
     ]
     token, token_status = _token_masked()
     if add_form is None:
         add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
-    if edit_forms is None:
-        edit_forms = []
     return {
         "rows": rows,
         "events": WatcherEvent.objects.select_related("folder")[:50],
@@ -68,7 +71,6 @@ def _index_context(add_form=None, edit_forms=None):
         "token_status": token_status,
         "folders": folders,
         "add_form": add_form,
-        "edit_forms": edit_forms,
     }
 
 
@@ -176,10 +178,14 @@ def folder_update(request, pk):
                 folder.git_token = get_object_or_404(Folder, pk=pk).git_token
             folder.save()
             return redirect("watcher:index")
-        edit_forms = [(folder, form)]
+        edit_form = form
     else:
-        edit_forms = [(folder, FolderForm(instance=folder))]
-    return render(request, "watcher/index.html", _index_context(edit_forms=edit_forms))
+        edit_form = FolderForm(instance=folder)
+    return render(
+        request,
+        "watcher/index.html",
+        _index_context(edit_folder=folder, edit_form=edit_form),
+    )
 
 
 @login_required

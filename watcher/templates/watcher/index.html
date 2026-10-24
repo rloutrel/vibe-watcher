@@ -22,53 +22,7 @@
 </section>
 
 <section>
-  <h2>{% translate "Configuration" %}</h2>
-
-  <details class="accordion" id="accordion-add" {% if add_form.errors %}open{% endif %}>
-    <summary>{% translate "Add folder" %}</summary>
-    <div class="accordion-body">
-      {% with form=add_form folder="" %}
-        {% include "watcher/_folder_form.html" %}
-      {% endwith %}
-    </div>
-  </details>
-
-  <details class="accordion" id="accordion-folders">
-    <summary>{% translate "Folders" %}</summary>
-    <div class="accordion-body">
-      <table>
-        <tr><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th></th></tr>
-        {% for f in folders %}
-          <tr>
-            <td>{{ f.name }}{% if not f.enabled %} <span class="muted">({% translate "disabled" %})</span>{% endif %}</td>
-            <td><code>{{ f.path }}</code></td>
-            <td>{% if f.branch %}{{ f.branch }}{% else %}<span class="muted">{% translate "(checked-out)" %}</span>{% endif %}</td>
-            <td>{{ f.poll_interval }}s</td>
-            <td>
-              <a class="icon-btn edit-folder" href="{% url 'watcher:folder-update' f.pk %}" title="{% translate 'Edit' %}">✏️</a>
-              <form method="post" action="{% url 'watcher:folder-delete' f.pk %}" class="inline delete-form">
-                {% csrf_token %}
-                <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
-              </form>
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5" class="muted">{% translate "No folders yet." %}</td></tr>
-        {% endfor %}
-      </table>
-      {% for f, edit_form in edit_forms %}
-        <details class="accordion nested" id="accordion-edit-{{ f.pk }}" open>
-          <summary>{% translate "Edit" %}: {{ f.name }}</summary>
-          <div class="accordion-body">
-            {% with form=edit_form folder=f %}
-              {% include "watcher/_folder_form.html" %}
-            {% endwith %}
-          </div>
-        </details>
-      {% endfor %}
-    </div>
-  </details>
-
+  <h2>{% translate "Git token (HTTPS)" %}</h2>
   <details class="accordion" id="accordion-token">
     <summary>{% translate "Git token (HTTPS)" %}</summary>
     <div class="accordion-body">
@@ -94,11 +48,20 @@
   </details>
 </section>
 
+
 <section>
   <h2>{% translate "Folders" %}</h2>
+  <details class="accordion" id="accordion-add" {% if add_form.errors %}open{% endif %}>
+    <summary>＋ {% translate "Add folder" %}</summary>
+    <div class="accordion-body">
+      {% with form=add_form folder="" %}
+        {% include "watcher/_folder_form.html" %}
+      {% endwith %}
+    </div>
+  </details>
   <table>
     <tr><th>ON/OFF</th><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th>{% translate "Latest state" %}</th><th>{% translate "Actions" %}</th></tr>
-    {% for folder, snapshot, can_start in rows %}
+    {% for folder, snapshot, can_start, edit_form in rows %}
       <tr data-folder-row="{{ folder.pk }}">
         <td>
           <form method="post" action="{% url 'watcher:folder-toggle' folder.pk %}" class="inline toggle-form">
@@ -140,6 +103,20 @@
           </form>
         </td>
       </tr>
+      {% if edit_form %}
+        <tr class="edit-row">
+          <td colspan="7">
+            <details class="accordion nested" open>
+              <summary>{% translate "Edit" %}: {{ folder.name }}</summary>
+              <div class="accordion-body">
+                {% with form=edit_form folder=folder %}
+                  {% include "watcher/_folder_form.html" %}
+                {% endwith %}
+              </div>
+            </details>
+          </td>
+        </tr>
+      {% endif %}
     {% empty %}
       <tr><td colspan="7" class="muted">{% translate "No folders yet." %}</td></tr>
     {% endfor %}
