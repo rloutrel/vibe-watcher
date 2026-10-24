@@ -170,3 +170,13 @@ def start_docker(folder):
     if proc.returncode != 0:
         return False, (proc.stderr or proc.stdout or "compose up failed")[-500:]
     return True, (proc.stdout or "").strip()[-500:]
+
+
+def stop_docker(folder):
+    """Stop the folder's docker stack (docker compose down)."""
+    proc = _run_docker(["compose", "down"], cwd=folder.path)
+    if proc is None:
+        return False, "docker not available"
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout or "compose down failed")[-500:]
+    return True, (proc.stdout or "").strip()[-500:]

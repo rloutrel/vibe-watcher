@@ -33,9 +33,11 @@ def watcher_status():
     }
 
 
-@login_required
-def index(request):
+def _index_context(add_form=None, edit_folder=None, edit_form=None):
+    """Context for the main page: watcher state, folder rows, events,
+    and the inlined folder/token configuration (accordion)."""
     from .actions import docker_running
+    from .git import code_version
 
     folders = list(Folder.objects.order_by("name"))
     latest_by_folder = {}
@@ -49,22 +51,32 @@ def index(request):
         else:
             stack_down[folder.id] = False
     rows = [
-        (folder, latest_by_folder.get(folder.id), stack_down[folder.id])
+        (
+            folder,
+            latest_by_folder.get(folder.id),
+            stack_down[folder.id],
+            edit_form if edit_folder is not None and folder.pk == edit_folder.pk else None,
+        )
         for folder in folders
     ]
-    events = WatcherEvent.objects.select_related("folder")[:50]
-    from .git import code_version
+    token, token_status = _token_masked()
+    if add_form is None:
+        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
+    return {
+        "rows": rows,
+        "events": WatcherEvent.objects.select_related("folder")[:50],
+        "watcher": watcher_status(),
+        "code_version": code_version(),
+        "token_hint": "ghp_••••••••••••••••••••" if token else "",
+        "token_status": token_status,
+        "folders": folders,
+        "add_form": add_form,
+    }
 
-    return render(
-        request,
-        "watcher/index.html",
-        {
-            "rows": rows,
-            "events": events,
-            "watcher": watcher_status(),
-            "code_version": code_version(),
-        },
-    )
+
+@login_required
+def index(request):
+    return render(request, "watcher/index.html", _index_context())
 
 
 @login_required
@@ -148,9 +160,10 @@ def folder_create(request):
         if form.is_valid():
             form.save()
             return redirect("watcher:index")
+        add_form = form
     else:
-        form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
-    return render(request, "watcher/folder_form.html", {"form": form})
+        add_form = FolderForm(initial={"poll_interval": DEFAULT_POLL_INTERVAL})
+    return render(request, "watcher/index.html", _index_context(add_form=add_form))
 
 
 @login_required
@@ -165,12 +178,13 @@ def folder_update(request, pk):
                 folder.git_token = get_object_or_404(Folder, pk=pk).git_token
             folder.save()
             return redirect("watcher:index")
+        edit_form = form
     else:
-        form = FolderForm(instance=folder)
+        edit_form = FolderForm(instance=folder)
     return render(
         request,
-        "watcher/folder_form.html",
-        {"form": form, "folder": folder},
+        "watcher/index.html",
+        _index_context(edit_folder=folder, edit_form=edit_form),
     )
 
 
@@ -222,6 +236,19 @@ def folder_toggle(request, pk):
     folder.enabled = not folder.enabled
     folder.save(update_fields=["enabled"])
     return JsonResponse({"id": folder.id, "enabled": folder.enabled})
+
+
+@login_required
+@require_POST
+def folder_rename(request, pk):
+    """Rename a folder in place (inline input in the card summary)."""
+    folder = get_object_or_404(Folder, pk=pk)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "missing name"}, status=400)
+    folder.name = name
+    folder.save(update_fields=["name"])
+    return JsonResponse({"id": folder.id, "name": folder.name})
 
 
 @login_required
@@ -313,6 +340,23 @@ def folder_start_docker(request, pk):
 
 @login_required
 @require_POST
+def folder_stop_docker(request, pk):
+    """Manually stop the folder's docker stack."""
+    from .actions import stop_docker
+
+    folder = get_object_or_404(Folder, pk=pk)
+    ok, output = stop_docker(folder)
+    record_event(
+        "change" if ok else "error",
+        f"{folder.name}: docker stack {'stopped' if ok else 'failed to stop'} (manual)",
+        folder=folder,
+        detail={"output": output[-500:]},
+    )
+    return redirect("watcher:index")
+
+
+@login_required
+@require_POST
 def folder_check_now(request, pk):
     """Scan one folder immediately and return the fresh snapshot."""
     from . import scanner
@@ -346,15 +390,7 @@ def _token_masked():
 
 @login_required
 def config_page(request):
-    token, status = _token_masked()
-    return render(
-        request,
-        "watcher/config.html",
-        {
-            "token_hint": "ghp_••••••••••••••••••••" if token else "",
-            "token_status": status,
-        },
-    )
+    return redirect("watcher:index")
 
 
 @login_required
@@ -366,7 +402,7 @@ def config_token(request):
     if token:
         AppSetting.set("git_token", token)
         os.environ["VIBE_WATCHER_GIT_TOKEN"] = token
-    return redirect("watcher:config-page")
+    return redirect("watcher:index")
 
 
 @login_required
@@ -375,7 +411,7 @@ def config_token_delete(request):
 
     AppSetting.objects.filter(key="git_token").delete()
     os.environ.pop("VIBE_WATCHER_GIT_TOKEN", None)
-    return redirect("watcher:config-page")
+    return redirect("watcher:index")
 
 
 @login_required

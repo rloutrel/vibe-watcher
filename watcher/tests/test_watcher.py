@@ -1642,8 +1642,8 @@ class TokenConfigTests(TestCase, RepoFixture):
         AppSetting.objects.all().delete()
         super().tearDown()
 
-    def test_config_page_shows_status(self):
-        response = self.client.get(reverse("watcher:config-page"))
+    def test_index_shows_token_status(self):
+        response = self.client.get(reverse("watcher:index"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No token configured")
 
@@ -1660,7 +1660,7 @@ class TokenConfigTests(TestCase, RepoFixture):
         self.assertEqual(os.environ["VIBE_WATCHER_GIT_TOKEN"], "ghp_secret123")
 
         # page shows a masked token, never the value
-        response = self.client.get(reverse("watcher:config-page"))
+        response = self.client.get(reverse("watcher:index"))
         self.assertNotContains(response, "ghp_secret123")
         self.assertContains(response, "Configured")
 
@@ -2241,19 +2241,6 @@ class ThemeI18nTests(TestCase, RepoFixture):
         self.assertIn("Intervalle de vérification", html)
         self.assertIn("Enregistrer", html)
 
-
-class ConfigBackLinkTests(TestCase, RepoFixture):
-    def setUp(self):
-        from django.contrib.auth.models import User
-
-        User.objects.create_user("back", password="pw")
-        self.client.login(username="back", password="pw")
-
-    def test_config_page_has_back_link(self):
-        response = self.client.get(reverse("watcher:config-page"))
-        html = response.content.decode()
-        self.assertIn('href="%s"' % reverse("watcher:index"), html)
-        self.assertIn("←", html)
 
 
 class PullRetryOnAlreadyNotifiedTests(TestCase, RepoFixture):

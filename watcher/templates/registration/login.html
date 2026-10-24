@@ -1,11 +1,14 @@
 {% extends "watcher/base.html" %}
 {% load i18n %}
 {% block content %}
+<style>
+  form input { padding: .4rem .55rem; border: 1px solid var(--input-border); border-radius: 8px; font-size: .95rem; background: var(--input-bg); color: var(--text); }
+</style>
 <h2>{% translate "Log in" %}</h2>
 <form method="post">
   {% csrf_token %}
   <table>{{ form.as_table }}</table>
-  <button class="btn" type="submit">{% translate "Log in" %}</button>
+  <button class="btn primary" type="submit" title="{% translate 'Log in' %}" aria-label="{% translate 'Log in' %}">🔑</button>
 </form>
 {% if form.errors %}
 <p class="muted">{% translate "Your username and password didn't match. Please try again." %}</p>
