@@ -181,3 +181,6 @@ msgstr ""
 
 msgid "Back"
 msgstr "Zurück"
+
+msgid "Docker stack is down — start it"
+msgstr "Docker-Stack ist gestoppt – jetzt starten"

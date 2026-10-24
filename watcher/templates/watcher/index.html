@@ -25,7 +25,7 @@
   <h2>{% translate "Folders" %} <a class="btn" href="{% url 'watcher:folder-create' %}">{% translate "Add folder" %}</a></h2>
   <table>
     <tr><th>ON/OFF</th><th>{% translate "Name" %}</th><th>{% translate "Path" %}</th><th>{% translate "Branch" %}</th><th>{% translate "Interval" %}</th><th>{% translate "Latest state" %}</th><th>{% translate "Actions" %}</th></tr>
-    {% for folder, snapshot in rows %}
+    {% for folder, snapshot, can_start in rows %}
       <tr data-folder-row="{{ folder.pk }}">
         <td>
           <form method="post" action="{% url 'watcher:folder-toggle' folder.pk %}" class="inline toggle-form">
@@ -50,6 +50,12 @@
           {% endif %}
         </td>
         <td>
+          {% if can_start %}
+            <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
+              {% csrf_token %}
+              <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
+            </form>
+          {% endif %}
           <form method="post" action="{% url 'watcher:folder-check-now' folder.pk %}" class="inline check-form">
             {% csrf_token %}
             <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>

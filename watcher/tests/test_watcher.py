@@ -2399,3 +2399,50 @@ class UnifiedPullTests(TestCase, RepoFixture):
         self.assertEqual(calls.count("fetch"), 1)
         self.assertEqual(calls.count("merge"), 1)
         self.assertNotIn("pull", calls)
+
+
+class StartDockerButtonTests(TestCase, RepoFixture):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("starter", password="pw")
+        self.client.login(username="starter", password="pw")
+
+    @mock.patch("watcher.actions.docker_running", return_value=False)
+    def test_start_button_shown_when_stack_down(self, _mock):
+        self.make_folder(name="x", path="/tmp/x", post_pull_command="docker compose up -d")
+        html = self.client.get(reverse("watcher:index")).content.decode()
+        self.assertIn("start-form", html)
+        self.assertIn(reverse("watcher:folder-start-docker", args=[Folder.objects.first().pk]), html)
+
+    @mock.patch("watcher.actions.docker_running", return_value=True)
+    def test_start_button_hidden_when_stack_up(self, _mock):
+        self.make_folder(name="x", path="/tmp/x", post_pull_command="docker compose up -d")
+        html = self.client.get(reverse("watcher:index")).content.decode()
+        self.assertNotIn("start-form", html)
+
+    @mock.patch("watcher.actions.docker_running", return_value=False)
+    def test_no_button_without_compose_command(self, _mock):
+        self.make_folder(name="x", path="/tmp/x", post_pull_command="")
+        html = self.client.get(reverse("watcher:index")).content.decode()
+        self.assertNotIn("start-form", html)
+
+    def test_start_action_redirects_and_records(self):
+        import watcher.actions as actions
+
+        folder = self.make_folder(name="x", path="/tmp/x", post_pull_command="docker compose up -d")
+        with mock.patch.object(actions, "start_docker", return_value=(True, "started")):
+            response = self.client.post(
+                reverse("watcher:folder-start-docker", args=[folder.pk])
+            )
+        self.assertEqual(response.status_code, 302)
+        event = WatcherEvent.objects.filter(message__contains="started (manual)").first()
+        self.assertIsNotNone(event)
+
+    def test_start_action_requires_login(self):
+        from django.test import Client
+
+        folder = self.make_folder(name="x", path="/tmp/x")
+        response = Client().post(reverse("watcher:folder-start-docker", args=[folder.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)

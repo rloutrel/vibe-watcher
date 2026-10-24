@@ -19,6 +19,7 @@ urlpatterns = [
     path("folders/find/", views.find_projects, name="folder-find"),
     path("folders/<int:pk>/toggle/", views.folder_toggle, name="folder-toggle"),
     path("folders/<int:pk>/check/", views.folder_check_now, name="folder-check-now"),
+    path("folders/<int:pk>/start/", views.folder_start_docker, name="folder-start-docker"),
     path("folders/export/", views.folders_export, name="folders-export"),
     path("folders/import/", views.folders_import, name="folders-import"),
 ]

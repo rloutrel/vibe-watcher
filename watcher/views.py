@@ -15,6 +15,7 @@ from .forms import FolderForm
 from .git import (NO_REMOTE_MESSAGE, GitError, GitRepo, detect_repo,
                   expand_path, find_repos, list_dir_entries)
 from .models import Folder, Snapshot, WatcherEvent, WatcherStatus, redact
+from .scanner import record_event
 
 
 def watcher_status():
@@ -34,11 +35,23 @@ def watcher_status():
 
 @login_required
 def index(request):
+    from .actions import docker_running
+
     folders = list(Folder.objects.order_by("name"))
     latest_by_folder = {}
+    stack_down = {}
     for folder in folders:
         latest_by_folder[folder.id] = Snapshot.objects.filter(folder=folder).first()
-    rows = [(folder, latest_by_folder.get(folder.id)) for folder in folders]
+        # Show the start button when the project has a docker compose
+        # post-pull command but its stack isn't running.
+        if folder.enabled and "docker compose" in (folder.post_pull_command or ""):
+            stack_down[folder.id] = docker_running(folder) is False
+        else:
+            stack_down[folder.id] = False
+    rows = [
+        (folder, latest_by_folder.get(folder.id), stack_down[folder.id])
+        for folder in folders
+    ]
     events = WatcherEvent.objects.select_related("folder")[:50]
     from .git import code_version
 
@@ -279,6 +292,23 @@ def folders_import(request):
             updated += 1
 
     return JsonResponse({"created": created, "updated": updated, "skipped": skipped})
+
+
+@login_required
+@require_POST
+def folder_start_docker(request, pk):
+    """Manually start the folder's docker stack (the play button)."""
+    from .actions import start_docker
+
+    folder = get_object_or_404(Folder, pk=pk)
+    ok, output = start_docker(folder)
+    record_event(
+        "change" if ok else "error",
+        f"{folder.name}: docker stack {'started' if ok else 'failed to start'} (manual)",
+        folder=folder,
+        detail={"output": output[-500:]},
+    )
+    return redirect("watcher:index")
 
 
 @login_required
