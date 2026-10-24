@@ -340,6 +340,7 @@
   document.querySelectorAll("details.folder-card").forEach(function (card) {
     var summary = card.querySelector("summary");
     summary.addEventListener("click", function (ev) {
+      ev.preventDefault();
       if (ev.target.closest("form, input, button, a")) return;
       card.open = !card.open;
     });
