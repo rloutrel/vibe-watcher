@@ -51,6 +51,105 @@
 
 <section>
   <h2>{% translate "Folders" %}</h2>
+  <div class="folder-grid">
+    <details class="accordion folder-card" id="accordion-add" {% if add_form.errors %}open{% endif %}>
+      <summary>＋ {% translate "Add folder" %}</summary>
+      <div class="accordion-body">
+        {% with form=add_form folder="" %}
+          {% include "watcher/_folder_form.html" %}
+        {% endwith %}
+      </div>
+    </details>
+    {% for folder, snapshot, can_start, edit_form in rows %}
+      <details class="accordion folder-card" data-folder-row="{{ folder.pk }}" {% if edit_form %}open{% endif %}>
+        <summary>
+          <span class="folder-title">
+            {{ folder.name }}
+            {% if not folder.enabled %}<span class="muted">({% translate "disabled" %})</span>{% endif %}
+          </span>
+          {% if snapshot %}
+            <span class="badge {% if snapshot.state == 'error' %}stale{% elif snapshot.state == 'empty' %}never-run{% elif 'behind' in snapshot.state %}never-run{% else %}ok{% endif %}">{{ snapshot.state }}</span>
+          {% else %}
+            <span class="badge never-run">–</span>
+          {% endif %}
+        </summary>
+        <div class="accordion-body">
+          <p><code>{{ folder.path }}</code></p>
+          <p class="muted">
+            {% if folder.branch %}{{ folder.branch }}{% else %}{% translate "(checked-out)" %}{% endif %}
+            · {{ folder.poll_interval }}s
+            {% if snapshot and snapshot.upstream %} · {{ snapshot.commits_behind }} {% translate "behind" %} / {{ snapshot.commits_ahead }} {% translate "ahead" %}{% endif %}
+          </p>
+          <div class="folder-actions">
+            <form method="post" action="{% url 'watcher:folder-toggle' folder.pk %}" class="inline toggle-form">
+              {% csrf_token %}
+              <button type="submit"
+                      class="switch {% if folder.enabled %}on{% else %}off{% endif %}"
+                      title="{% if folder.enabled %}Disable watching{% else %}Enable watching{% endif %}">
+                <span class="knob"></span>
+              </button>
+            </form>
+            {% if can_start %}
+              <form method="post" action="{% url 'watcher:folder-start-docker' folder.pk %}" class="inline start-form">
+                {% csrf_token %}
+                <button class="icon-btn start-btn" type="submit" title="{% translate 'Docker stack is down — start it' %}">▶</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{% url 'watcher:folder-check-now' folder.pk %}" class="inline check-form">
+              {% csrf_token %}
+              <button class="icon-btn check-btn" type="submit" title="{% translate 'Check now' %}">⟳</button>
+            </form>
+            <a class="icon-btn" href="{% url 'watcher:folder-update' folder.pk %}" title="{% translate 'Edit' %}">✏️</a>
+            <form method="post" action="{% url 'watcher:folder-delete' folder.pk %}" class="inline delete-form">
+              {% csrf_token %}
+              <button class="icon-btn" type="submit" title="{% translate 'Delete' %}">🗑️</button>
+            </form>
+          </div>
+          {% if edit_form %}
+            <div class="folder-edit">
+              {% with form=edit_form folder=folder %}
+                {% include "watcher/_folder_form.html" %}
+              {% endwith %}
+            </div>
+          {% endif %}
+        </div>
+      </details>
+    {% empty %}
+      <p class="muted">{% translate "No folders yet." %}</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>{% translate "Git token (HTTPS)" %}</h2>
+  <details class="accordion" id="accordion-token">
+    <summary>{% translate "Git token (HTTPS)" %}</summary>
+    <div class="accordion-body">
+      <p class="muted">
+        {% translate "Used to fetch over HTTPS with authentication when your repos are cloned over SSH. Your SSH remotes are left untouched — the watcher fetches https://&lt;token&gt;@github.com/… directly without adding a second remote. A GitHub token needs the repo (read) scope." %}
+      </p>
+      <form method="post" action="{% url 'watcher:config-token' %}">
+        {% csrf_token %}
+        <table>
+          <tr>
+            <th><label for="id_token">{% translate "Token" %}</label></th>
+            <td>
+              <input type="password" name="token" id="id_token" autocomplete="off"
+                     placeholder="{{ token_hint }}" style="width: 24rem;">
+              <p class="muted">{{ token_status }}</p>
+            </td>
+          </tr>
+        </table>
+        <button class="btn" type="submit">{% translate "Save token" %}</button>
+        <a class="btn" href="{% url 'watcher:config-token-delete' %}">{% translate "Remove token" %}</a>
+      </form>
+    </div>
+  </details>
+</section>
+
+
+<section>
+  <h2>{% translate "Folders" %}</h2>
   <details class="accordion" id="accordion-add" {% if add_form.errors %}open{% endif %}>
     <summary>＋ {% translate "Add folder" %}</summary>
     <div class="accordion-body">
@@ -158,6 +257,12 @@
   .accordion summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .95rem; user-select: none; }
   .accordion-body { padding: .25rem 1rem 1rem; }
   .accordion.nested { margin-top: .6rem; }
+  .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .8rem; margin-bottom: 2rem; }
+  .folder-grid .accordion { margin-bottom: 0; }
+  .folder-card summary { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .folder-title { overflow-wrap: anywhere; }
+  .folder-actions { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; }
+  .folder-edit { margin-top: .8rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .8rem; }
   .field-label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }
   .field input, .field select, .row select { width: 100%; box-sizing: border-box; padding: .4rem .55rem; border: 1px solid var(--input-border); border-radius: 8px; font-size: .95rem; background: var(--input-bg); color: var(--text); }
